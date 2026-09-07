@@ -8,9 +8,15 @@ import { useOnboarding } from '@/contexts/OnboardingContext';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getSummaryModelSizeLabel, getSummaryModelSizeMb } from '@/lib/onboarding-summary-model';
-import type { ParakeetDownloadProgressEvent } from '@/lib/parakeet';
-
-const PARAKEET_MODEL = 'parakeet-tdt-0.6b-v3-int8';
+import {
+  SPEECH_MODEL,
+  SPEECH_MODEL_LABEL,
+  SPEECH_MODEL_SIZE_MB,
+  estimateDownloadedMb,
+  type SpeechModelDownloadProgressEvent,
+  type SpeechModelDownloadCompleteEvent,
+  type SpeechModelDownloadErrorEvent,
+} from '@/lib/onboarding-speech-model';
 
 type DownloadStatus = 'waiting' | 'downloading' | 'completed' | 'cancelled' | 'error';
 
@@ -28,8 +34,8 @@ export function DownloadProgressStep() {
     goNext,
     selectedSummaryModel,
     recommendedSummaryModel,
-    parakeetDownloaded,
-    setParakeetDownloaded,
+    speechModelDownloaded,
+    setSpeechModelDownloaded,
     summaryModelDownloaded,
     setSummaryModelDownloaded,
     startBackgroundDownloads,
@@ -38,11 +44,11 @@ export function DownloadProgressStep() {
 
   const [isMac, setIsMac] = useState(false);
 
-  const [parakeetState, setParakeetState] = useState<DownloadState>({
-    status: parakeetDownloaded ? 'completed' : 'waiting',
-    progress: parakeetDownloaded ? 100 : 0,
+  const [speechState, setSpeechState] = useState<DownloadState>({
+    status: speechModelDownloaded ? 'completed' : 'waiting',
+    progress: speechModelDownloaded ? 100 : 0,
     downloadedMb: 0,
-    totalMb: 670,
+    totalMb: SPEECH_MODEL_SIZE_MB,
     speedMbps: 0,
   });
 
@@ -55,7 +61,7 @@ export function DownloadProgressStep() {
   });
 
   const [isCompleting, setIsCompleting] = useState(false);
-  const parakeetDownloadStartedRef = useRef(false);
+  const speechDownloadStartedRef = useRef(false);
   const summaryDownloadStartedRef = useRef(false);
   const retryingRef = useRef(false);
   const retryingSummaryRef = useRef(false);
@@ -68,13 +74,13 @@ export function DownloadProgressStep() {
       return;
     }
 
-    console.log('[DownloadProgressStep] Retrying Parakeet download');
+    console.log('[DownloadProgressStep] Retrying Whisper speech model download');
     retryingRef.current = true;
 
     // Reset error state
-    setParakeetState((prev) => ({
+    setSpeechState((prev) => ({
       ...prev,
-      status: 'waiting',
+      status: 'downloading',
       error: undefined,
       progress: 0,
       downloadedMb: 0,
@@ -82,11 +88,12 @@ export function DownloadProgressStep() {
     }));
 
     try {
-      await invoke('parakeet_retry_download', { modelName: PARAKEET_MODEL });
+      await invoke('whisper_init');
+      await invoke('whisper_download_model', { modelName: SPEECH_MODEL });
       // Progress events will update state
     } catch (error) {
       console.error('[DownloadProgressStep] Retry failed:', error);
-      setParakeetState((prev) => ({
+      setSpeechState((prev) => ({
         ...prev,
         status: 'error',
         error: error instanceof Error ? error.message : 'Retry failed',
@@ -167,20 +174,20 @@ export function DownloadProgressStep() {
 
   // Start the required transcription model immediately; summary readiness must not block it.
   useEffect(() => {
-    if (parakeetDownloadStartedRef.current) return;
-    parakeetDownloadStartedRef.current = true;
+    if (speechDownloadStartedRef.current) return;
+    speechDownloadStartedRef.current = true;
 
-    if (!parakeetDownloaded) {
-      setParakeetState((prev) => ({ ...prev, status: 'downloading' }));
+    if (!speechModelDownloaded) {
+      setSpeechState((prev) => ({ ...prev, status: 'downloading' }));
     }
 
     startBackgroundDownloads({
-      includeParakeet: true,
+      includeSpeechModel: true,
       includeSummary: false,
     }).catch((error) => {
-      console.error('Failed to start Parakeet download:', error);
-      if (!parakeetDownloaded) {
-        setParakeetState((prev) => ({ ...prev, status: 'error', error: String(error) }));
+      console.error('Failed to start speech model download:', error);
+      if (!speechModelDownloaded) {
+        setSpeechState((prev) => ({ ...prev, status: 'error', error: String(error) }));
       }
     });
   }, []);
@@ -194,56 +201,51 @@ export function DownloadProgressStep() {
     startSummaryDownload();
   }, [selectedSummaryModel]);
 
-  // Listen to Parakeet download progress
+  // Listen to Whisper speech model download progress.
+  // The Whisper engine reports percent only; byte counts are estimated from the catalog size.
   useEffect(() => {
-    const unlistenProgress = listen<ParakeetDownloadProgressEvent>(
-      'parakeet-model-download-progress',
+    const unlistenProgress = listen<SpeechModelDownloadProgressEvent>(
+      'model-download-progress',
       (event) => {
-        const { modelName, progress, downloaded_mb, total_mb, speed_mbps, status } = event.payload;
-        if (modelName !== PARAKEET_MODEL) return;
+        const { modelName, progress } = event.payload;
+        if (modelName !== SPEECH_MODEL) return;
 
-        if (status === 'cancelled') {
-          setParakeetState((prev) => ({
-            ...prev,
-            status: 'cancelled',
-            progress: 0,
-            downloadedMb: 0,
-            speedMbps: 0,
-          }));
-          setParakeetDownloaded(false);
-          return;
-        }
-
-        setParakeetState((prev) => ({
+        setSpeechState((prev) => ({
           ...prev,
-          status: status === 'completed' ? 'completed' : 'downloading',
+          status: progress >= 100 ? 'completed' : 'downloading',
           progress,
-          downloadedMb: downloaded_mb ?? prev.downloadedMb,
-          totalMb: total_mb ?? prev.totalMb,
-          speedMbps: speed_mbps ?? prev.speedMbps,
+          downloadedMb: estimateDownloadedMb(progress),
+          totalMb: SPEECH_MODEL_SIZE_MB,
+          speedMbps: 0,
         }));
 
-        if (status === 'completed') {
-          setParakeetDownloaded(true);
+        if (progress >= 100) {
+          setSpeechModelDownloaded(true);
         }
       }
     );
 
-    const unlistenComplete = listen<{ modelName: string }>(
-      'parakeet-model-download-complete',
+    const unlistenComplete = listen<SpeechModelDownloadCompleteEvent>(
+      'model-download-complete',
       (event) => {
-        if (event.payload.modelName === PARAKEET_MODEL) {
-          setParakeetState((prev) => ({ ...prev, status: 'completed', progress: 100 }));
-          setParakeetDownloaded(true);
+        if (event.payload.modelName === SPEECH_MODEL) {
+          setSpeechState((prev) => ({
+            ...prev,
+            status: 'completed',
+            progress: 100,
+            downloadedMb: SPEECH_MODEL_SIZE_MB,
+            totalMb: SPEECH_MODEL_SIZE_MB,
+          }));
+          setSpeechModelDownloaded(true);
         }
       }
     );
 
-    const unlistenError = listen<{ modelName: string; error: string }>(
-      'parakeet-model-download-error',
+    const unlistenError = listen<SpeechModelDownloadErrorEvent>(
+      'model-download-error',
       (event) => {
-        if (event.payload.modelName === PARAKEET_MODEL) {
-          setParakeetState((prev) => ({
+        if (event.payload.modelName === SPEECH_MODEL) {
+          setSpeechState((prev) => ({
             ...prev,
             status: 'error',
             error: event.payload.error,
@@ -326,7 +328,7 @@ export function DownloadProgressStep() {
           totalMb: getSummaryModelSizeMb(selectedSummaryModel),
         }));
         await startBackgroundDownloads({
-          includeParakeet: false,
+          includeSpeechModel: false,
           includeSummary: true,
           summaryModel: selectedSummaryModel,
         });
@@ -340,20 +342,20 @@ export function DownloadProgressStep() {
   const handleContinue = async () => {
     // Verify actual model availability (catches state drift)
     try {
-      await invoke('parakeet_init');
-      const actuallyAvailable = await invoke<boolean>('parakeet_has_available_models');
+      await invoke('whisper_init');
+      const actuallyAvailable = await invoke<boolean>('whisper_has_available_models');
 
-      if (actuallyAvailable && !parakeetDownloaded) {
+      if (actuallyAvailable && !speechModelDownloaded) {
         console.log('[DownloadProgressStep] Model available but state not updated');
-        setParakeetDownloaded(true);
-        setParakeetState((prev) => ({
+        setSpeechModelDownloaded(true);
+        setSpeechState((prev) => ({
           ...prev,
           status: 'completed',
           progress: 100,
         }));
       } else if (
         !actuallyAvailable &&
-        (parakeetState.status === 'error' || parakeetState.status === 'cancelled')
+        (speechState.status === 'error' || speechState.status === 'cancelled')
       ) {
         toast.error('Transcription engine required', {
           description: 'Please retry the download before continuing.',
@@ -365,7 +367,7 @@ export function DownloadProgressStep() {
     }
 
     // Check if downloads are complete for toast notification
-    const downloadsComplete = parakeetState.status === 'completed' &&
+    const downloadsComplete = speechState.status === 'completed' &&
       summaryState.status === 'completed';
 
     // Show toast if downloads still in progress
@@ -501,8 +503,8 @@ export function DownloadProgressStep() {
           {renderDownloadCard(
             'Transcription Engine',
             <Mic className="w-5 h-5 text-gray-600" />,
-            parakeetState,
-            '~670 MB'
+            speechState,
+            `${SPEECH_MODEL_LABEL} · ~${SPEECH_MODEL_SIZE_MB} MB`
           )}
 
           {renderDownloadCard(
@@ -514,9 +516,9 @@ export function DownloadProgressStep() {
           )}
         </div>
 
-        {/* Info Message - Only show when Parakeet is downloaded */}
+        {/* Info Message - Only show when the speech model is downloaded */}
         <AnimatePresence>
-          {parakeetDownloaded && !summaryModelDownloaded && (
+          {speechModelDownloaded && !summaryModelDownloaded && (
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -541,10 +543,10 @@ export function DownloadProgressStep() {
         <div className="w-full max-w-xs">
           <Button
             onClick={handleContinue}
-            disabled={!parakeetDownloaded || isCompleting}
+            disabled={!speechModelDownloaded || isCompleting}
             className="w-full h-11 bg-gray-900 hover:bg-gray-800 text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {(isCompleting || !parakeetDownloaded) ? (
+            {(isCompleting || !speechModelDownloaded) ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             ) : (
               'Continue'

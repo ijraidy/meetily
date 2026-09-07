@@ -1,0 +1,18 @@
+{
+  "bundle": {
+    "targets": ["nsis"],
+    "createUpdaterArtifacts": false,
+    "windows": {
+      "signCommand": null
+    },
+    "resources": {
+      "cuda/cublas64_13.dll": "cublas64_13.dll",
+      "cuda/cublasLt64_13.dll": "cublasLt64_13.dll"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": []
+    }
+  }
+}

@@ -23,7 +23,7 @@ function readFromStorage(): string[] {
   if (typeof window === 'undefined') return [];
   try {
     const raw = window.localStorage.getItem(MRU_KEY);
-    if (!raw) return [];
+    if (!raw) return ['ar', 'en'];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     const normalised: string[] = [];

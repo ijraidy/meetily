@@ -7,6 +7,9 @@ const resolveFromTiptapPm = (pkg) =>
 const nextConfig = {
   reactStrictMode: false, // Disabled for BlockNote compatibility
   output: 'export',
+  typescript: {
+    tsconfigPath: './tsconfig.build.json',
+  },
   images: {
     unoptimized: true,
   },

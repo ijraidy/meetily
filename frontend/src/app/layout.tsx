@@ -25,6 +25,7 @@ import { RecordingPostProcessingProvider } from '@/contexts/RecordingPostProcess
 import { ImportAudioDialog, ImportDropOverlay } from '@/components/ImportAudio'
 import { ImportDialogProvider } from '@/contexts/ImportDialogContext'
 import { isAudioExtension, getAudioFormatsDisplayList } from '@/constants/audioFormats'
+import { ThemeProvider, useTheme, THEME_INIT_SCRIPT } from '@/contexts/ThemeContext'
 
 
 const sourceSans3 = Source_Sans_3({
@@ -59,6 +60,12 @@ function ConditionalImportDialog({
       preselectedFile={importFilePath}
     />
   );
+}
+
+// Toaster that follows the app theme (must render inside ThemeProvider).
+function ThemedToaster() {
+  const { theme } = useTheme();
+  return <Toaster position="bottom-center" richColors closeButton theme={theme} />;
 }
 
 // export { metadata } from './metadata'
@@ -231,8 +238,11 @@ export default function RootLayout({
   }
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${sourceSans3.variable} font-sans antialiased`}>
+        {/* Apply the persisted theme class before hydration to avoid a flash of light theme */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <ThemeProvider>
         <AnalyticsProvider>
           <RecordingStateProvider>
             <TranscriptProvider>
@@ -276,7 +286,8 @@ export default function RootLayout({
           </RecordingStateProvider>
         </AnalyticsProvider>
 
-        <Toaster position="bottom-center" richColors closeButton />
+        <ThemedToaster />
+        </ThemeProvider>
       </body>
     </html>
   )

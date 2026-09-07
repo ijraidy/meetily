@@ -8,12 +8,17 @@ static ANALYTICS_CLIENT: std::sync::Mutex<Option<Arc<AnalyticsClient>>> = std::s
 
 #[command]
 pub async fn init_analytics() -> Result<(), String> {
+    // Telemetry is permanently disabled in this build: no API key, no host.
+    // AnalyticsClient::new never constructs a PostHog client when `enabled` is
+    // false, so every track_* / identify / session command below is a local no-op.
     let config = AnalyticsConfig {
-        api_key: "phc_Aa9PqeCkDkVbtbRsYjtmHANBfcscjCVupxZwrtL5vZ77".to_string(),
-        host: Some("https://us.i.posthog.com".to_string()),
-        enabled: true,
+        api_key: String::new(),
+        host: None,
+        enabled: false,
     };
-    
+
+    log::info!("Analytics disabled in this build");
+
     let client = Arc::new(AnalyticsClient::new(config).await);
     
     let mut guard = ANALYTICS_CLIENT.lock().unwrap();

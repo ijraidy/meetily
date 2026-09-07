@@ -2,7 +2,7 @@ import React from "react";
 import Image from "next/image";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "./ui/dialog";
 import { VisuallyHidden } from "./ui/visually-hidden";
-import { About } from "./About";
+import About from "./About";
 
 interface LogoProps {
   isCollapsed: boolean;
@@ -18,7 +18,7 @@ const Logo = React.forwardRef<HTMLButtonElement, LogoProps>(
               ref={ref}
               type="button"
               className="flex items-center justify-center mb-2 cursor-pointer bg-transparent border-none p-0 hover:opacity-80 transition-opacity"
-              aria-label="About Meetily"
+              aria-label="About Meetly"
             >
               <Image
                 src="/logo-collapsed.png"
@@ -36,7 +36,7 @@ const Logo = React.forwardRef<HTMLButtonElement, LogoProps>(
               ref={ref}
               type="button"
               className="text-lg text-center border rounded-full bg-blue-50 border-white font-semibold text-gray-700 mb-2 block items-center cursor-pointer hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              aria-label="About Meetily"
+              aria-label="About Meetly"
             >
               <span>Meetily</span>
             </button>
@@ -44,7 +44,7 @@ const Logo = React.forwardRef<HTMLButtonElement, LogoProps>(
         )}
         <DialogContent>
           <VisuallyHidden>
-            <DialogTitle>About Meetily</DialogTitle>
+            <DialogTitle>About Meetly</DialogTitle>
           </VisuallyHidden>
           <About />
         </DialogContent>

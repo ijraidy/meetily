@@ -33,7 +33,8 @@ export interface SummaryLanguageDetectionResult {
 export function readPinnedSummaryLanguageDefault(): string | null {
   if (typeof window === 'undefined') return null;
   try {
-    return normaliseLanguageCode(window.localStorage.getItem(SUMMARY_LANGUAGE_DEFAULT_KEY));
+    const saved = window.localStorage.getItem(SUMMARY_LANGUAGE_DEFAULT_KEY);
+    return normaliseLanguageCode(saved);
   } catch {
     return null;
   }
@@ -43,7 +44,7 @@ export function writePinnedSummaryLanguageDefault(value: string | null): void {
   if (typeof window === 'undefined') return;
   try {
     if (value) window.localStorage.setItem(SUMMARY_LANGUAGE_DEFAULT_KEY, value);
-    else window.localStorage.removeItem(SUMMARY_LANGUAGE_DEFAULT_KEY);
+    else window.localStorage.setItem(SUMMARY_LANGUAGE_DEFAULT_KEY, '__auto__');
   } catch {
     // Preference writes are non-critical; meeting-specific persistence happens separately.
   }

@@ -99,10 +99,10 @@ const TranscriptSegment = memo(function TranscriptSegment({
                 <div className="flex-1">
                     {isStreaming ? (
                         <div className="bg-gray-100 border border-gray-200 rounded-lg px-3 py-2">
-                            <p className="text-base text-gray-800 leading-relaxed">{displayText}</p>
+                            <p dir="auto" className="text-base text-gray-800 leading-relaxed">{displayText}</p>
                         </div>
                     ) : (
-                        <p className="text-base text-gray-800 leading-relaxed">{displayText}</p>
+                        <p dir="auto" className="text-base text-gray-800 leading-relaxed">{displayText}</p>
                     )}
                 </div>
             </div>
@@ -257,7 +257,7 @@ export const VirtualizedTranscriptView: React.FC<VirtualizedTranscriptViewProps>
                         </>
                     ) : (
                         <>
-                            <p className="text-lg font-semibold">Welcome to meetily!</p>
+                            <p className="text-lg font-semibold">Welcome to Meetly!</p>
                             <p className="text-xs mt-1">Start recording to see live transcription</p>
                         </>
                     )}

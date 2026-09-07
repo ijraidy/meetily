@@ -65,10 +65,10 @@ export function useRecordingStart(
   const getTranscriptionProvider = useCallback(async (): Promise<string> => {
     try {
       const config = await invoke<TranscriptConfig | null>('api_get_transcript_config');
-      return config?.provider || 'parakeet';
+      return config?.provider || 'localWhisper';
     } catch (error) {
       console.error('Failed to load transcription provider:', error);
-      return 'parakeet';
+      return 'localWhisper';
     }
   }, []);
 

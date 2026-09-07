@@ -1,0 +1,32 @@
+{
+  "name": "Meeting Action Plan / ملخص وخطة عمل",
+  "description": "Meeting summary, decisions, to-do checklist, and agreed next steps with owners and deadlines. Select Arabic as the summary language for Arabic output.",
+  "sections": [
+    {
+      "title": "Meeting Summary",
+      "instruction": "Summarize the meeting purpose, main discussion points, and outcomes in a short paragraph. Preserve names and technical terms accurately, including in mixed Arabic and English meetings.",
+      "format": "paragraph"
+    },
+    {
+      "title": "Decisions",
+      "instruction": "List only decisions explicitly agreed during the meeting. Do not turn suggestions or unresolved questions into decisions.",
+      "format": "list"
+    },
+    {
+      "title": "To-Do List",
+      "instruction": "Extract each distinct committed task once as a Markdown checkbox. Use checked boxes only for tasks explicitly reported as completed. Include an owner, deadline, and transcript timestamp only if explicitly stated. Otherwise use Not specified for that field. Keep relative deadlines as spoken; never guess calendar dates. Keep unassigned tasks and mark their owner as Not specified. Do not invent tasks, names, dates, timestamps, or completion status.",
+      "format": "list",
+      "item_format": "- [ ] Task — Owner: name or Not specified; Due: deadline or Not specified; Source: timestamp or Not specified"
+    },
+    {
+      "title": "Action Plan",
+      "instruction": "Organize only the agreed next steps into a numbered list. Include the intended deliverable, dependencies, priority, and follow-up checkpoint only when explicitly discussed. Preserve stated ordering; otherwise keep the meeting order without implying priority. Distinguish proposed steps from committed tasks and do not invent a strategy or schedule.",
+      "format": "list"
+    },
+    {
+      "title": "Open Questions and Blockers",
+      "instruction": "List unresolved questions, blockers, and pending approvals. Identify who will follow up only if stated. Do not invent answers or resolutions.",
+      "format": "list"
+    }
+  ]
+}

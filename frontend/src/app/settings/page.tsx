@@ -10,6 +10,7 @@ import { RecordingSettings } from '@/components/RecordingSettings';
 import { PreferenceSettings } from '@/components/PreferenceSettings';
 import { SummaryModelSettings } from '@/components/SummaryModelSettings';
 import { BetaSettings } from '@/components/BetaSettings';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { useConfig } from '@/contexts/ConfigContext';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
@@ -110,7 +111,20 @@ export default function SettingsPage() {
             </TabsList>
 
             <TabsContent value="general">
-              <PreferenceSettings />
+              <div className="space-y-6">
+                {/* Appearance Section */}
+                <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">Appearance</h3>
+                      <p className="text-sm text-gray-600">Choose a light or dark look for the app. Dark is the default.</p>
+                    </div>
+                    <ThemeToggle />
+                  </div>
+                </div>
+
+                <PreferenceSettings />
+              </div>
             </TabsContent>
             <TabsContent value="recording">
               <RecordingSettings />

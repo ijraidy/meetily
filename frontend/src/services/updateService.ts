@@ -1,11 +1,13 @@
 /**
  * Update Service
  *
- * Handles automatic software updates using Tauri updater plugin.
- * Provides update checking, downloading, and installation functionality.
+ * Automatic updates are disabled in this build. There is no update server, so
+ * this service never contacts the Tauri updater plugin's `check()`; every
+ * update check reports "up to date" for the current version. The public shape
+ * is preserved so existing consumers keep compiling.
  */
 
-import { check, Update } from '@tauri-apps/plugin-updater';
+import type { Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { getVersion } from '@tauri-apps/api/app';
 
@@ -26,63 +28,31 @@ export interface UpdateProgress {
 
 /**
  * Update Service
- * Singleton service for managing app updates
+ * Singleton service for managing app updates (inert in this build)
  */
 export class UpdateService {
-  private updateCheckInProgress = false;
   private lastCheckTime: number | null = null;
   private readonly CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
   /**
-   * Check for available updates
-   * @param force Force check even if recently checked
-   * @returns Promise with update information
+   * Check for available updates.
+   * Always resolves to "no update available" without any network access.
+   * @param _force Ignored; kept for API compatibility
    */
-  async checkForUpdates(force = false): Promise<UpdateInfo> {
-    // Prevent concurrent update checks
-    if (this.updateCheckInProgress) {
-      throw new Error('Update check already in progress');
-    }
-
-    // Skip if checked recently (unless forced)
-    if (!force && this.lastCheckTime) {
-      const timeSinceLastCheck = Date.now() - this.lastCheckTime;
-      if (timeSinceLastCheck < this.CHECK_INTERVAL_MS) {
-        console.log('Skipping update check - checked recently');
-        return {
-          available: false,
-          currentVersion: await getVersion(),
-        };
-      }
-    }
-
-    this.updateCheckInProgress = true;
+  async checkForUpdates(_force = false): Promise<UpdateInfo> {
     this.lastCheckTime = Date.now();
 
+    let currentVersion = 'unknown';
     try {
-      const currentVersion = await getVersion();
-      const update = await check();
-
-      if (update?.available) {
-        return {
-          available: true,
-          currentVersion,
-          version: update.version,
-          date: update.date,
-          body: update.body,
-        };
-      }
-
-      return {
-        available: false,
-        currentVersion,
-      };
+      currentVersion = await getVersion();
     } catch (error) {
-      console.error('Failed to check for updates:', error);
-      throw error;
-    } finally {
-      this.updateCheckInProgress = false;
+      console.error('Failed to read app version:', error);
     }
+
+    return {
+      available: false,
+      currentVersion,
+    };
   }
 
   /**

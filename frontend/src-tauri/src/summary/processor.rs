@@ -211,19 +211,21 @@ fn translation_system_prompt(target_language: &str) -> String {
 2. Preserve the Markdown structure EXACTLY: keep every `#`, `**`, `-`, `|`, code fence marker, and table pipe in the same position.
 3. Do NOT translate: proper nouns (names of people, products, companies), code identifiers, file paths, URLs, numeric values, or text inside backticks.
 4. Do not add commentary or explanation. Output ONLY the translated Markdown.
-5. If a technical term has no standard translation, keep the original English word."#
+5. If a technical term has no standard translation, keep the original English word.
+6. Preserve task checkbox markers `- [ ]` and `- [x]` and their completion state. Never invent owners, deadlines, priorities, or commitments during translation.
+7. For Arabic, use clear Modern Standard Arabic. Preserve proper names as supplied and do not translate technical identifiers."#
     )
 }
 
 fn build_chunk_summary_user_prompt(chunk: &str) -> String {
     format!(
-        "{ENGLISH_BASE_SUMMARY_INSTRUCTION}\n\nProvide a concise but comprehensive summary of the following transcript chunk. Capture all key points, decisions, action items, and mentioned individuals. Do not include reasoning, self-correction, or meta-commentary — output only the summary content.\n\n<transcript_chunk>\n{chunk}\n</transcript_chunk>"
+        "{ENGLISH_BASE_SUMMARY_INSTRUCTION}\n\nProvide a concise but comprehensive summary of the following transcript chunk. Capture all key points, decisions, action items, and mentioned individuals. Preserve each task's stated owner, deadline, completion status, dependencies, and source timestamp when available. Preserve proper names in their original script. Distinguish suggestions from commitments; never fill missing fields with guesses. Do not include reasoning, self-correction, or meta-commentary — output only the summary content.\n\n<transcript_chunk>\n{chunk}\n</transcript_chunk>"
     )
 }
 
 fn build_combine_summary_user_prompt(combined_text: &str) -> String {
     format!(
-        "{ENGLISH_BASE_SUMMARY_INSTRUCTION}\n\nThe following are consecutive summaries of a meeting. Combine them into a single, coherent, and detailed narrative summary that retains all important details, organized logically. Do not include reasoning, self-correction, or meta-commentary — output only the summary content.\n\n<summaries>\n{combined_text}\n</summaries>"
+        "{ENGLISH_BASE_SUMMARY_INSTRUCTION}\n\nThe following are consecutive summaries of a meeting. Combine them into a single, coherent, and detailed narrative summary that retains all important details, organized logically. Preserve each distinct task with its stated owner, deadline, completion status, dependencies, and source timestamp when available. Preserve proper names in their original script. Deduplicate repeated tasks without losing details, and keep unresolved or conflicting commitments explicit. Do not invent missing fields or turn suggestions into decisions. Do not include reasoning, self-correction, or meta-commentary — output only the summary content.\n\n<summaries>\n{combined_text}\n</summaries>"
     )
 }
 fn build_final_report_system_prompt(
