@@ -45,7 +45,7 @@ export default function About() {
           <Mic className="w-7 h-7" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Meetly</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Minuteman</h1>
           <p className="text-sm text-gray-600">
             Personal meeting assistant{version ? ` · v${version}` : ''}
           </p>
@@ -55,7 +55,7 @@ export default function About() {
       <section className="space-y-2">
         <h2 className="text-base font-semibold text-gray-800">About this app</h2>
         <p className="text-sm text-gray-600 leading-relaxed">
-          Meetly records meetings, transcribes them locally, and turns them into summaries, decisions,
+          Minuteman records meetings, transcribes them locally, and turns them into summaries, decisions,
           and action plans with owners and deadlines. It is customized and maintained by {OWNER} for
           personal use on Windows, with an iPhone companion in development.
         </p>

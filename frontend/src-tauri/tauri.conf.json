@@ -1,8 +1,8 @@
 {
     "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-    "productName": "Meetly",
+    "productName": "Minuteman",
     "version": "0.4.0",
-    "identifier": "com.ijraidy.meetly",
+    "identifier": "com.ijraidy.minuteman",
     "build": {
         "frontendDist": "../out",
         "devUrl": "http://localhost:3118",
@@ -12,7 +12,7 @@
     "app": {
         "windows": [
             {
-                "title": "Meetly",
+                "title": "Minuteman",
                 "width": 1100,
                 "height": 700,
                 "resizable": true,

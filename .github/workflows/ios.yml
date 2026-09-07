@@ -1,4 +1,4 @@
-name: iOS (Meetly iPhone)
+name: iOS (Minuteman iPhone)
 
 on:
   push:
@@ -69,8 +69,8 @@ jobs:
         run: |
           set -euo pipefail
           xcodebuild -resolvePackageDependencies \
-            -project Meetly.xcodeproj \
-            -scheme Meetly \
+            -project Minuteman.xcodeproj \
+            -scheme Minuteman \
             -skipPackagePluginValidation \
             -skipMacroValidation
 
@@ -78,8 +78,8 @@ jobs:
         run: |
           set -euo pipefail
           xcodebuild build \
-            -project Meetly.xcodeproj \
-            -scheme Meetly \
+            -project Minuteman.xcodeproj \
+            -scheme Minuteman \
             -configuration Debug \
             -destination "generic/platform=iOS Simulator" \
             -derivedDataPath build/DerivedData \

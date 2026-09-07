@@ -2,7 +2,7 @@ import SwiftData
 import SwiftUI
 
 @main
-struct MeetlyApp: App {
+struct MinutemanApp: App {
     private let container: ModelContainer
 
     @StateObject private var recorder: AudioRecorder
@@ -48,12 +48,12 @@ struct MeetlyApp: App {
             SyncOutboxItem.self,
         ])
         do {
-            let configuration = ModelConfiguration("Meetly", schema: schema, isStoredInMemoryOnly: false)
+            let configuration = ModelConfiguration("Minuteman", schema: schema, isStoredInMemoryOnly: false)
             return try ModelContainer(for: schema, configurations: [configuration])
         } catch {
             // Fall back to an in-memory store rather than crashing at launch; data will not persist.
             do {
-                let fallback = ModelConfiguration("MeetlyMemory", schema: schema, isStoredInMemoryOnly: true)
+                let fallback = ModelConfiguration("MinutemanMemory", schema: schema, isStoredInMemoryOnly: true)
                 return try ModelContainer(for: schema, configurations: [fallback])
             } catch {
                 fatalError("Unable to create a SwiftData container: \(error)")

@@ -228,7 +228,7 @@ async fn require_auth(State(ctx): State<Ctx>, request: Request<Body>, next: Next
             .into_response();
         response.headers_mut().insert(
             header::WWW_AUTHENTICATE,
-            HeaderValue::from_static("Bearer realm=\"Meetly\""),
+            HeaderValue::from_static("Bearer realm=\"Minuteman\""),
         );
         response
     }

@@ -1,4 +1,4 @@
-# Meetly for iPhone: full meeting app
+# Minuteman for iPhone: full meeting app
 
 Status: researched design, not an implemented or tested iOS app. Updated 2026-09-06. The user's scope is a full meeting application, not a read-only companion. The Windows build remains the immediate deliverable.
 
@@ -13,7 +13,7 @@ Status: researched design, not an implemented or tested iOS app. Updated 2026-09
 | To-do lists and action plans | Structured tasks with IDs, owners, deadlines, status, and transcript references | Completion and edits persist and sync; missing fields stay unspecified |
 | Edit, search, playback, export, delete | Native meeting library, transcript editor, audio player and share sheet | Offline access, RTL and mixed-direction rendering, safe deletion and export round trips |
 | AI/model settings | Download manager, integrity checks, model selection, progress and deletion | Model download is resumable; inference does not silently switch to a cloud provider |
-| Create and attend Meetly video meetings | Native LiveKit Swift client with a self-hosted or hosted media server | Create room, share link, join, mic/camera controls, participants, reconnect, leave and end |
+| Create and attend Minuteman video meetings | Native LiveKit Swift client with a self-hosted or hosted media server | Create room, share link, join, mic/camera controls, participants, reconnect, leave and end |
 | Screen sharing and in-call chat | LiveKit data channels and iOS ReplayKit extension | Validate sharing, permissions, and recovery on physical devices |
 | Create/attend external meetings | Provider-specific Zoom/Teams/Meet integrations | Distinguish a provider link from an embedded meeting; explicitly report recording availability |
 | Desktop/phone synchronization | Authenticated encrypted sync service plus local database on each device | Offline changes reconcile, large audio transfers resume, device revocation works |
@@ -41,7 +41,7 @@ Do not equate a successful model load with acceptable Arabic quality. Benchmark 
 
 ## Online meetings: implementable paths and limits
 
-For meetings created in Meetly, [LiveKit's native Swift SDK](https://docs.livekit.io/transport/sdk-platforms/swift/) supplies the calling layer. A media/signaling server is still required for online participants. Keep room-token signing secrets on an authenticated server, never in the iPhone bundle. Local AI does not make online video calling serverless.
+For meetings created in Minuteman, [LiveKit's native Swift SDK](https://docs.livekit.io/transport/sdk-platforms/swift/) supplies the calling layer. A media/signaling server is still required for online participants. Keep room-token signing secrets on an authenticated server, never in the iPhone bundle. Local AI does not make online video calling serverless.
 
 [Zoom's Meeting SDK for iOS](https://developers.zoom.us/docs/meeting-sdk/ios/) embeds Zoom meetings. Its documentation states that joining meetings outside the app's account requires authorization from March 2, 2026. SDK registration, credentials and the applicable authorization flow must be supplied before this can ship. Do not assume the separate Zoom Video SDK is compatible with ordinary Zoom meeting links.
 
@@ -49,7 +49,7 @@ For meetings created in Meetly, [LiveKit's native Swift SDK](https://docs.liveki
 
 [Microsoft's Teams meeting-app documentation](https://learn.microsoft.com/en-us/microsoftteams/platform/apps-in-teams-meetings/teams-apps-in-meetings) is the starting point for a separate Teams adapter. Tenant permissions and the audio-access mechanism need a dedicated proof of concept; a Teams tab is not proof of raw audio access.
 
-Do not design around silently capturing every other iOS app's audio. Validate audio access separately for each supported calling path. For calls inside Meetly, use the meeting SDK's accessible tracks and show recording indicators. A link that opens another app must not be labeled as integrated transcription.
+Do not design around silently capturing every other iOS app's audio. Validate audio access separately for each supported calling path. For calls inside Minuteman, use the meeting SDK's accessible tracks and show recording indicators. A link that opens another app must not be labeled as integrated transcription.
 
 ## Sync and access away from the desktop
 
@@ -63,7 +63,7 @@ For access from anywhere, keep an encrypted cached copy on the phone and optiona
 2. Obtain the iPhone model/iOS version and a Mac build path. [Xcode requires macOS](https://developer.apple.com/xcode/system-requirements); [device installation requires signing](https://help.apple.com/xcode/mac/current/en.lproj/dev5a825a1ca.html).
 3. Prove local speech and summarization on that phone with representative Arabic audio before selecting models.
 4. Implement the offline library, recording, tasks and authenticated desktop sync.
-5. Implement native Meetly calls and one provider integration at a time, testing actual participant audio access.
+5. Implement native Minuteman calls and one provider integration at a time, testing actual participant audio access.
 6. Complete the parity checklist, accessibility/RTL, interruption, battery, memory, sync and installation testing.
 
 Open inputs: exact iPhone/iOS, access to a Mac, Apple signing account, first external meeting provider, and hosting choice for online rooms and remote sync. No hosting service, paid account, external meeting or invitation has been created.

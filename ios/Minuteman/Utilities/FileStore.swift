@@ -14,7 +14,7 @@ enum FileStore {
     static var applicationSupportDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? documentsDirectory
-        return ensureDirectory(base.appendingPathComponent("Meetly", isDirectory: true))
+        return ensureDirectory(base.appendingPathComponent("Minuteman", isDirectory: true))
     }
 
     /// Recorded and imported audio files (backed up with the device).

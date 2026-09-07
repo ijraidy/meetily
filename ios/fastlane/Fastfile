@@ -1,4 +1,4 @@
-# Meetly iPhone - fastlane configuration.
+# Minuteman iPhone - fastlane configuration.
 #
 # Authentication is App Store Connect API key only (no Apple ID password, no 2FA).
 # Signing is "match-free": a distribution certificate is created/downloaded with
@@ -9,9 +9,9 @@ require "securerandom"
 
 default_platform(:ios)
 
-APP_IDENTIFIER = "com.ijraidy.meetly.ios".freeze
-SCHEME = "Meetly".freeze
-PROJECT = "Meetly.xcodeproj".freeze
+APP_IDENTIFIER = "com.ijraidy.minuteman.ios".freeze
+SCHEME = "Minuteman".freeze
+PROJECT = "Minuteman.xcodeproj".freeze
 
 platform :ios do
   desc "Build a signed App Store IPA and upload it to TestFlight"
@@ -37,16 +37,16 @@ platform :ios do
 
     # 1. Generate the Xcode project (idempotent) and a placeholder icon if none exists.
     sh("cd .. && xcodegen generate")
-    sh("cd .. && python3 scripts/make_placeholder_icon.py Meetly/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png")
+    sh("cd .. && python3 scripts/make_placeholder_icon.py Minuteman/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png")
 
     # 2. Make sure the bundle id + App Store Connect record exist (no-op if present).
     create_app_online(
       api_key: api_key,
       app_identifier: APP_IDENTIFIER,
-      app_name: "Meetly",
+      app_name: "Minuteman",
       app_version: "0.1.0",
       language: "en-US",
-      sku: "com.ijraidy.meetly.ios",
+      sku: "com.ijraidy.minuteman.ios",
       team_id: team_id,
       skip_itc: false
     )
@@ -87,7 +87,7 @@ platform :ios do
         adhoc: false,
         force: true,
         cert_id: lane_context[SharedValues::CERT_CERTIFICATE_ID],
-        filename: "Meetly_AppStore.mobileprovision",
+        filename: "Minuteman_AppStore.mobileprovision",
         output_path: "build/profiles"
       )
 
@@ -116,7 +116,7 @@ platform :ios do
         clean: true,
         export_method: "app-store",
         output_directory: "build",
-        output_name: "Meetly.ipa",
+        output_name: "Minuteman.ipa",
         xcargs: "CURRENT_PROJECT_VERSION=#{build_number} -skipMacroValidation -skipPackagePluginValidation",
         export_options: {
           signingStyle: "manual",

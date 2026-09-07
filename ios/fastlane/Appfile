@@ -1,2 +1,2 @@
-app_identifier("com.ijraidy.meetly.ios")
+app_identifier("com.ijraidy.minuteman.ios")
 team_id(ENV["APPLE_TEAM_ID"]) if ENV["APPLE_TEAM_ID"]

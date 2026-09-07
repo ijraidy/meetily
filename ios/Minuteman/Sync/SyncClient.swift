@@ -44,7 +44,7 @@ enum SyncError: LocalizedError {
     }
 }
 
-/// HTTP JSON client for the Meetly desktop sync API.
+/// HTTP JSON client for the Minuteman desktop sync API.
 final class SyncClient {
     let configuration: SyncConfiguration
     private let session: URLSession
@@ -99,7 +99,7 @@ final class SyncClient {
             throw SyncError.audioFileMissing
         }
 
-        let boundary = "MeetlyBoundary-\(UUID().uuidString)"
+        let boundary = "MinutemanBoundary-\(UUID().uuidString)"
         let bodyURL = FileManager.default.temporaryDirectory.appendingPathComponent("upload-\(UUID().uuidString).multipart")
         defer { try? FileManager.default.removeItem(at: bodyURL) }
         try writeMultipartBody(to: bodyURL, boundary: boundary, title: title, language: language, audioURL: audioURL)

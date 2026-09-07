@@ -204,7 +204,7 @@ fn clean_language(language: Option<String>) -> Option<String> {
 
 pub async fn health(State(ctx): State<Ctx>) -> Json<Value> {
     Json(json!({
-        "app": "Meetly",
+        "app": "Minuteman",
         "version": ctx.app.package_info().version.to_string(),
         "auth_required": true,
     }))

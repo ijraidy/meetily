@@ -33,7 +33,7 @@ function isTailscaleAddress(ip: string): boolean {
 }
 
 function buildPairingString(address: string, port: number, token: string): string {
-  return `meetly://pair?url=${encodeURIComponent(`http://${address}:${port}`)}&token=${encodeURIComponent(token)}`;
+  return `minuteman://pair?url=${encodeURIComponent(`http://${address}:${port}`)}&token=${encodeURIComponent(token)}`;
 }
 
 async function copyToClipboard(value: string): Promise<boolean> {
@@ -205,7 +205,7 @@ export function SyncSettings() {
               </span>
             </div>
             <p className="text-sm text-gray-600">
-              Runs a small local API on this PC so the Meetly iPhone app can upload recordings,
+              Runs a small local API on this PC so the Minuteman iPhone app can upload recordings,
               read transcripts and edit summaries. Only devices that present the pairing token
               below can connect. Nothing leaves your network.
             </p>
@@ -304,7 +304,7 @@ export function SyncSettings() {
         <div>
           <h3 className="text-lg font-semibold text-gray-900 mb-1">Pair your iPhone</h3>
           <p className="text-sm text-gray-600">
-            In the Meetly iPhone app choose <em>Pair with PC</em> and paste the pairing string, or enter
+            In the Minuteman iPhone app choose <em>Pair with PC</em> and paste the pairing string, or enter
             the address and token by hand.
           </p>
         </div>
@@ -387,7 +387,7 @@ export function SyncSettings() {
 
       <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
         <p className="text-sm text-blue-800">
-          <strong>Note:</strong> Windows Firewall may ask to allow Meetly on private networks the first time
+          <strong>Note:</strong> Windows Firewall may ask to allow Minuteman on private networks the first time
           the server starts. Tailscale traffic is encrypted end to end; on plain Wi-Fi the token is sent in
           the clear, so only pair on networks you trust.
         </p>

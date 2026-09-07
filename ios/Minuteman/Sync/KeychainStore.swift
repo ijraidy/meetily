@@ -5,7 +5,7 @@ import Security
 enum KeychainStore {
     static let desktopTokenKey = "desktopToken"
 
-    private static let service = "com.ijraidy.meetly.ios"
+    private static let service = "com.ijraidy.minuteman.ios"
 
     static func string(for key: String) -> String? {
         var query = baseQuery(for: key)

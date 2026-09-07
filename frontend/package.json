@@ -1,5 +1,5 @@
 {
-    "name": "meetly",
+    "name": "minuteman",
     "version": "0.4.0",
     "private": true,
     "main": "electron/main.js",

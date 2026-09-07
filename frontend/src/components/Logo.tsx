@@ -18,11 +18,11 @@ const Logo = React.forwardRef<HTMLButtonElement, LogoProps>(
               ref={ref}
               type="button"
               className="flex items-center justify-center mb-2 cursor-pointer bg-transparent border-none p-0 hover:opacity-80 transition-opacity"
-              aria-label="About Meetly"
+              aria-label="About Minuteman"
             >
               <Image
                 src="/logo-collapsed.png"
-                alt="Meetily"
+                alt="Minuteman"
                 width={40}
                 height={40}
                 className="object-contain"
@@ -36,15 +36,15 @@ const Logo = React.forwardRef<HTMLButtonElement, LogoProps>(
               ref={ref}
               type="button"
               className="text-lg text-center border rounded-full bg-blue-50 border-white font-semibold text-gray-700 mb-2 block items-center cursor-pointer hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              aria-label="About Meetly"
+              aria-label="About Minuteman"
             >
-              <span>Meetily</span>
+              <span>Minuteman</span>
             </button>
           </DialogTrigger>
         )}
         <DialogContent>
           <VisuallyHidden>
-            <DialogTitle>About Meetly</DialogTitle>
+            <DialogTitle>About Minuteman</DialogTitle>
           </VisuallyHidden>
           <About />
         </DialogContent>

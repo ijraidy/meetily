@@ -1,7 +1,7 @@
-# XcodeGen specification for the Meetly iPhone app.
+# XcodeGen specification for the Minuteman iPhone app.
 # Regenerate the Xcode project with:  cd ios && xcodegen generate
 # The .xcodeproj is NOT committed; CI generates it on every run.
-name: Meetly
+name: Minuteman
 
 options:
   bundleIdPrefix: com.ijraidy
@@ -34,22 +34,22 @@ packages:
     exactVersion: 1.1.0
 
 targets:
-  Meetly:
+  Minuteman:
     type: application
     platform: iOS
     deploymentTarget: "17.0"
     sources:
-      - path: Meetly
+      - path: Minuteman
         excludes:
           - "Info.plist"
     dependencies:
       - package: WhisperKit
         product: WhisperKit
     info:
-      path: Meetly/Info.plist
+      path: Minuteman/Info.plist
       properties:
-        CFBundleDisplayName: Meetly
-        CFBundleName: Meetly
+        CFBundleDisplayName: Minuteman
+        CFBundleName: Minuteman
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         CFBundleDevelopmentRegion: en
@@ -63,8 +63,8 @@ targets:
           - UIInterfaceOrientationPortrait
         UIBackgroundModes:
           - audio
-        NSMicrophoneUsageDescription: "Meetly records meeting audio so it can be transcribed on this device."
-        NSLocalNetworkUsageDescription: "Meetly connects to your Meetly desktop app on the local network to sync meetings."
+        NSMicrophoneUsageDescription: "Minuteman records meeting audio so it can be transcribed on this device."
+        NSLocalNetworkUsageDescription: "Minuteman connects to your Minuteman desktop app on the local network to sync meetings."
         ITSAppUsesNonExemptEncryption: false
         NSAppTransportSecurity:
           # The desktop sync server is usually plain HTTP on a LAN or VPN.
@@ -72,8 +72,8 @@ targets:
           NSAllowsArbitraryLoads: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.ijraidy.meetly.ios
-        PRODUCT_NAME: Meetly
+        PRODUCT_BUNDLE_IDENTIFIER: com.ijraidy.minuteman.ios
+        PRODUCT_NAME: Minuteman
         TARGETED_DEVICE_FAMILY: "1"
         SUPPORTS_MACCATALYST: "NO"
         SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"

@@ -83,7 +83,7 @@ struct SettingsView: View {
         } header: {
             Text("Desktop connection")
         } footer: {
-            Text("The token is stored in the iOS Keychain. Use the address and token shown by the Meetly desktop app.")
+            Text("The token is stored in the iOS Keychain. Use the address and token shown by the Minuteman desktop app.")
         }
     }
 
@@ -95,7 +95,7 @@ struct SettingsView: View {
         Task { @MainActor in
             do {
                 let health = try await SyncService.testConnection(baseURL: url, token: currentToken)
-                let name = health.app ?? "Meetly"
+                let name = health.app ?? "Minuteman"
                 let version = health.version ?? ""
                 testSucceeded = true
                 let target = "\(name) \(version)".trimmingCharacters(in: .whitespaces)
@@ -167,12 +167,12 @@ struct SettingsView: View {
             LabeledContent("Version") {
                 Text(verbatim: Self.versionString)
             }
-            Text("Meetly by Juraydi al-Mansouri")
-            Text("Privacy-first meeting assistant. Recording and transcription happen on this iPhone; summaries are produced by your Meetly desktop app.")
+            Text("Minuteman by Juraydi al-Mansouri")
+            Text("Privacy-first meeting assistant. Recording and transcription happen on this iPhone; summaries are produced by your Minuteman desktop app.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         } header: {
-            Text("About Meetly")
+            Text("About Minuteman")
         }
     }
 

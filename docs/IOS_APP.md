@@ -1,6 +1,6 @@
-# Meetly for iPhone (v0.1)
+# Minuteman for iPhone (v0.1)
 
-Native SwiftUI companion app for the Meetly desktop app. It records and imports
+Native SwiftUI companion app for the Minuteman desktop app. It records and imports
 meetings, transcribes them on the phone with WhisperKit (multilingual Whisper,
 Arabic + English), plays audio back against the transcript, shows and edits the
 Markdown summary produced by the desktop, and keeps both sides in sync over a
@@ -13,8 +13,8 @@ required: GitHub's macOS runners generate the Xcode project, compile it, and
 
 | Item | Value |
 | --- | --- |
-| App name | Meetly |
-| Bundle id | `com.ijraidy.meetly.ios` |
+| App name | Minuteman |
+| Bundle id | `com.ijraidy.minuteman.ios` |
 | Organization | Juraydi al-Mansouri |
 | Minimum iOS | 17.0 (iPhone only, portrait) |
 | Language | Swift 5.10, SwiftUI, SwiftData |
@@ -29,7 +29,7 @@ ios/
 ├── Gemfile                     fastlane
 ├── fastlane/Appfile, Fastfile  lane `beta` -> signed IPA -> TestFlight
 ├── scripts/make_placeholder_icon.py  writes a solid 1024px icon if none exists
-└── Meetly/
+└── Minuteman/
     ├── App/            MeetlyApp (SwiftData container + services), ContentView (tabs), MeetingWorkflow
     ├── Models/         Meeting, TranscriptSegment, SummaryDocument, SyncOutboxItem (SwiftData)
     ├── Audio/          AudioRecorder (AVAudioEngine -> 16 kHz mono WAV), AudioPlayer, AudioImporter, AudioSessionController
@@ -91,7 +91,7 @@ folder (and delete the `.gitignore` line for it) whenever you have one.
 ### Not in v0.1
 
 - Local (on-phone) summaries with llama.cpp — summaries come from the desktop.
-- Meetly video calls (LiveKit), Zoom / Teams / Google Meet integration.
+- Minuteman video calls (LiveKit), Zoom / Teams / Google Meet integration.
 - Calendar and reminders.
 - Screen sharing / in-call chat.
 - Deleting a meeting on the desktop from the phone (there is no DELETE endpoint
@@ -156,7 +156,7 @@ runs `bundle exec fastlane beta` (log artifact `ios-fastlane-log` on failure).
 4. Creates a temporary keychain, then `get_certificates` (cert) creates or
    downloads an **Apple Distribution** certificate and
    `get_provisioning_profile` (sigh) creates/downloads an **App Store**
-   profile for `com.ijraidy.meetly.ios`.
+   profile for `com.ijraidy.minuteman.ios`.
 5. `update_code_signing_settings` switches the generated project to manual
    signing with that profile.
 6. `build_app` (gym) archives Release and exports an `app-store` IPA;
@@ -182,10 +182,10 @@ certificates". Revoke old "Apple Distribution" certificates in
    the **Key ID** and the **Issuer ID** shown at the top of that page.
 3. **App record** (optional — the lane's `produce` step creates it, but you
    can do it by hand): App Store Connect → My Apps → **+** → New App →
-   platform iOS, name `Meetly`, primary language English, bundle id
-   `com.ijraidy.meetly.ios` (create the identifier first under
+   platform iOS, name `Minuteman`, primary language English, bundle id
+   `com.ijraidy.minuteman.ios` (create the identifier first under
    Certificates, Identifiers & Profiles if it is not offered), SKU
-   `com.ijraidy.meetly.ios`.
+   `com.ijraidy.minuteman.ios`.
 4. **GitHub secrets** (repo → Settings → Secrets and variables → Actions):
 
    | Secret | Value |
@@ -197,20 +197,20 @@ certificates". Revoke old "Apple Distribution" certificates in
 
 5. **TestFlight on the iPhone**: install the TestFlight app from the App Store,
    sign in with the same Apple ID that is a member of the team (or that you
-   add as an internal tester under App Store Connect → Meetly → TestFlight →
+   add as an internal tester under App Store Connect → Minuteman → TestFlight →
    Internal Testing).
-6. Run the workflow: GitHub → Actions → *iOS (Meetly iPhone)* → *Run
+6. Run the workflow: GitHub → Actions → *iOS (Minuteman iPhone)* → *Run
    workflow*. The first upload also triggers Apple's export-compliance
    question; `ITSAppUsesNonExemptEncryption=false` is already in the
    Info.plist so builds become available without manual answers.
 
 ## Installing a build
 
-1. After the workflow finishes, App Store Connect → Meetly → TestFlight shows
+1. After the workflow finishes, App Store Connect → Minuteman → TestFlight shows
    the build as *Processing* for 5–20 minutes.
 2. Under *Internal Testing* create a group (once) and add your Apple ID; new
    builds are pushed to that group automatically.
-3. Open TestFlight on the iPhone → Meetly → *Install* / *Update*.
+3. Open TestFlight on the iPhone → Minuteman → *Install* / *Update*.
 4. First launch: allow the microphone; go to Settings → download a speech
    model on Wi-Fi (Base is a good start, Large v3 Turbo compressed for best
    Arabic accuracy on recent iPhones), enter the desktop URL + token, tap
