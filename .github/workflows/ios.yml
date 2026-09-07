@@ -1,0 +1,186 @@
+name: iOS (Meetly iPhone)
+
+on:
+  push:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+    inputs:
+      upload_to_testflight:
+        description: "Run the TestFlight lane after the compile check"
+        type: boolean
+        default: true
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FASTLANE_SKIP_UPDATE_CHECK: "1"
+  FASTLANE_HIDE_CHANGELOG: "1"
+  LC_ALL: en_US.UTF-8
+  LANG: en_US.UTF-8
+
+jobs:
+  build:
+    name: Compile check (iOS Simulator)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select latest stable Xcode
+        run: |
+          set -euo pipefail
+          latest="$(ls -d /Applications/Xcode_*.app | grep -vi beta | sort -V | tail -n 1 || true)"
+          if [ -z "$latest" ]; then
+            latest="$(ls -d /Applications/Xcode_*.app | sort -V | tail -n 1)"
+          fi
+          echo "Selecting $latest"
+          sudo xcode-select -s "$latest"
+          xcodebuild -version
+          swift --version
+
+      - name: Install XcodeGen
+        run: |
+          set -euo pipefail
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+          xcodegen --version
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('ios/project.yml') }}
+          restore-keys: |
+            spm-${{ runner.os }}-
+
+      - name: Resolve Swift packages
+        run: |
+          set -euo pipefail
+          xcodebuild -resolvePackageDependencies \
+            -project Meetly.xcodeproj \
+            -scheme Meetly \
+            -skipPackagePluginValidation \
+            -skipMacroValidation
+
+      - name: Build for iOS Simulator
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -project Meetly.xcodeproj \
+            -scheme Meetly \
+            -configuration Debug \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath build/DerivedData \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            ONLY_ACTIVE_ARCH=NO \
+            2>&1 | tee build.log
+
+      - name: Upload build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-log
+          path: ios/build.log
+          if-no-files-found: ignore
+
+  testflight:
+    name: TestFlight upload
+    needs: build
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    runs-on: macos-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for App Store Connect secrets
+        id: secrets
+        env:
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WANT_UPLOAD: ${{ github.event_name != 'workflow_dispatch' || inputs.upload_to_testflight }}
+        run: |
+          if [ "$WANT_UPLOAD" != "true" ]; then
+            echo "::notice::TestFlight upload not requested for this run."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -z "$KEY_ID" ] || [ -z "$ISSUER_ID" ] || [ -z "$KEY_CONTENT" ] || [ -z "$TEAM_ID" ]; then
+            echo "::warning::Skipping TestFlight: one or more secrets are missing (APP_STORE_CONNECT_API_KEY_ID, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_API_KEY_CONTENT, APPLE_TEAM_ID)."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Select latest stable Xcode
+        if: steps.secrets.outputs.ok == 'true'
+        run: |
+          set -euo pipefail
+          latest="$(ls -d /Applications/Xcode_*.app | grep -vi beta | sort -V | tail -n 1 || true)"
+          if [ -z "$latest" ]; then
+            latest="$(ls -d /Applications/Xcode_*.app | sort -V | tail -n 1)"
+          fi
+          sudo xcode-select -s "$latest"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        if: steps.secrets.outputs.ok == 'true'
+        run: |
+          set -euo pipefail
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+
+      - name: Set up Ruby
+        if: steps.secrets.outputs.ok == 'true'
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          working-directory: ios
+
+      - name: Install fastlane
+        if: steps.secrets.outputs.ok == 'true'
+        run: |
+          set -euo pipefail
+          bundle config set --local path vendor/bundle
+          bundle install --jobs 4
+
+      - name: Build and upload to TestFlight
+        if: steps.secrets.outputs.ok == 'true'
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT: "120"
+        run: |
+          set -o pipefail
+          bundle exec fastlane beta 2>&1 | tee fastlane.log
+
+      - name: Upload fastlane log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-fastlane-log
+          path: |
+            ios/fastlane.log
+            ~/Library/Logs/gym/*.log
+          if-no-files-found: ignore

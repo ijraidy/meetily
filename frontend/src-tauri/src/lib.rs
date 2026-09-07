@@ -51,6 +51,7 @@ pub mod openrouter;
 pub mod parakeet_engine;
 pub mod state;
 pub mod summary;
+pub mod sync;
 pub mod tray;
 pub mod utils;
 pub mod whisper_engine;
@@ -417,6 +418,7 @@ pub fn run() {
         )) as NotificationManagerState<tauri::Wry>)
         .manage(audio::init_system_audio_state())
         .manage(summary::summary_engine::ModelManagerState(Arc::new(tokio::sync::Mutex::new(None))))
+        .manage(sync::SyncState::new())
         .setup(|_app| {
             log::info!("Application setup complete");
 
@@ -508,6 +510,9 @@ pub fn run() {
             } else {
                 log::warn!("Failed to resolve resource directory for templates");
             }
+
+            // Local HTTP sync API for the iPhone companion (Settings > Sync)
+            sync::init(&_app.handle());
 
             Ok(())
         })
@@ -744,6 +749,11 @@ pub fn run() {
             audio::import::start_import_audio_command,
             audio::import::cancel_import_command,
             audio::import::is_import_in_progress_command,
+            // Local sync API commands (Settings > Sync)
+            sync::commands::sync_get_config,
+            sync::commands::sync_regenerate_token,
+            sync::commands::sync_set_enabled,
+            sync::commands::sync_set_port,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -1,0 +1,140 @@
+# Meetly iPhone - fastlane configuration.
+#
+# Authentication is App Store Connect API key only (no Apple ID password, no 2FA).
+# Signing is "match-free": a distribution certificate is created/downloaded with
+# `cert` (get_certificates) and an App Store provisioning profile with `sigh`
+# (get_provisioning_profile), both using the API key. See docs/IOS_APP.md.
+
+require "securerandom"
+
+default_platform(:ios)
+
+APP_IDENTIFIER = "com.ijraidy.meetly.ios".freeze
+SCHEME = "Meetly".freeze
+PROJECT = "Meetly.xcodeproj".freeze
+
+platform :ios do
+  desc "Build a signed App Store IPA and upload it to TestFlight"
+  lane :beta do
+    ensure_env_vars(
+      env_vars: %w[
+        APP_STORE_CONNECT_API_KEY_ID
+        APP_STORE_CONNECT_ISSUER_ID
+        APP_STORE_CONNECT_API_KEY_CONTENT
+        APPLE_TEAM_ID
+      ]
+    )
+
+    team_id = ENV["APPLE_TEAM_ID"]
+
+    api_key = app_store_connect_api_key(
+      key_id: ENV["APP_STORE_CONNECT_API_KEY_ID"],
+      issuer_id: ENV["APP_STORE_CONNECT_ISSUER_ID"],
+      key_content: ENV["APP_STORE_CONNECT_API_KEY_CONTENT"],
+      is_key_content_base64: true,
+      in_house: false
+    )
+
+    # 1. Generate the Xcode project (idempotent) and a placeholder icon if none exists.
+    sh("cd .. && xcodegen generate")
+    sh("cd .. && python3 scripts/make_placeholder_icon.py Meetly/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png")
+
+    # 2. Make sure the bundle id + App Store Connect record exist (no-op if present).
+    create_app_online(
+      api_key: api_key,
+      app_identifier: APP_IDENTIFIER,
+      app_name: "Meetly",
+      app_version: "0.1.0",
+      language: "en-US",
+      sku: "com.ijraidy.meetly.ios",
+      team_id: team_id,
+      skip_itc: false
+    )
+
+    # 3. Temporary keychain for the CI runner.
+    keychain_name = "meetly-ci-#{SecureRandom.hex(4)}"
+    keychain_password = SecureRandom.hex(16)
+    keychain_path = File.expand_path("~/Library/Keychains/#{keychain_name}-db")
+
+    begin
+      create_keychain(
+        name: keychain_name,
+        password: keychain_password,
+        default_keychain: true,
+        unlock: true,
+        timeout: 3600,
+        lock_when_sleeps: false,
+        add_to_search_list: true
+      )
+
+      # 4. Distribution certificate (created if the team has none usable here).
+      get_certificates(
+        api_key: api_key,
+        development: false,
+        generate_apple_certs: true,
+        team_id: team_id,
+        keychain_path: keychain_path,
+        keychain_password: keychain_password,
+        output_path: "build/certs"
+      )
+
+      # 5. App Store provisioning profile bound to that certificate.
+      get_provisioning_profile(
+        api_key: api_key,
+        app_identifier: APP_IDENTIFIER,
+        team_id: team_id,
+        development: false,
+        adhoc: false,
+        force: true,
+        cert_id: lane_context[SharedValues::CERT_CERTIFICATE_ID],
+        filename: "Meetly_AppStore.mobileprovision",
+        output_path: "build/profiles"
+      )
+
+      profile_name = lane_context[SharedValues::SIGH_NAME]
+      profile_uuid = lane_context[SharedValues::SIGH_UUID]
+
+      # 6. Switch the generated project to manual signing with that profile.
+      update_code_signing_settings(
+        path: PROJECT,
+        targets: [SCHEME],
+        use_automatic_signing: false,
+        team_id: team_id,
+        code_sign_identity: "Apple Distribution",
+        profile_name: profile_name,
+        profile_uuid: profile_uuid,
+        bundle_identifier: APP_IDENTIFIER
+      )
+
+      build_number = ENV["GITHUB_RUN_NUMBER"] || Time.now.strftime("%Y%m%d%H%M")
+
+      # 7. Archive + export.
+      build_app(
+        project: PROJECT,
+        scheme: SCHEME,
+        configuration: "Release",
+        clean: true,
+        export_method: "app-store",
+        output_directory: "build",
+        output_name: "Meetly.ipa",
+        xcargs: "CURRENT_PROJECT_VERSION=#{build_number} -skipMacroValidation -skipPackagePluginValidation",
+        export_options: {
+          signingStyle: "manual",
+          teamID: team_id,
+          provisioningProfiles: { APP_IDENTIFIER => profile_name }
+        }
+      )
+
+      # 8. Upload to TestFlight (do not block waiting for processing).
+      upload_to_testflight(
+        api_key: api_key,
+        ipa: lane_context[SharedValues::IPA_OUTPUT_PATH],
+        skip_waiting_for_build_processing: true,
+        skip_submission: true,
+        distribute_external: false
+      )
+    ensure
+      delete_keychain(name: keychain_name) if File.exist?(keychain_path)
+    end
+  end
+end

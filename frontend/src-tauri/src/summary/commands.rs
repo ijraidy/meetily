@@ -103,18 +103,30 @@ pub async fn api_save_meeting_summary<R: Runtime>(
         "api_save_meeting_summary (native) called for meeting_id: {}",
         meeting_id
     );
-    if !summary_is_renderable(&summary) {
+    save_meeting_summary(state.db_manager.pool(), &meeting_id, &summary).await?;
+    Ok(serde_json::json!({
+        "message": "Meeting summary saved successfully"
+    }))
+}
+
+/// Shared save path used by the Tauri command and the local sync API.
+///
+/// Validates that the summary is renderable and stores it through
+/// `SummaryProcessesRepository::update_meeting_summary` (which also bumps the
+/// meeting's `updated_at`).
+pub async fn save_meeting_summary(
+    pool: &sqlx::SqlitePool,
+    meeting_id: &str,
+    summary: &serde_json::Value,
+) -> Result<(), String> {
+    if !summary_is_renderable(summary) {
         return Err("Summary contains no visible content or model reasoning markers and was not saved.".into());
     }
-    let pool = state.db_manager.pool();
 
-
-    match SummaryProcessesRepository::update_meeting_summary(pool, &meeting_id, &summary).await {
+    match SummaryProcessesRepository::update_meeting_summary(pool, meeting_id, summary).await {
         Ok(true) => {
             log_info!("Summary saved successfully for meeting_id: {}", meeting_id);
-            Ok(serde_json::json!({
-                "message": "Meeting summary saved successfully"
-            }))
+            Ok(())
         }
         Ok(false) => {
             log_warn!(
@@ -294,7 +306,7 @@ fn summary_contains_reasoning_marker(value: &serde_json::Value) -> bool {
     }
 }
 
-fn summary_is_renderable(value: &serde_json::Value) -> bool {
+pub(crate) fn summary_is_renderable(value: &serde_json::Value) -> bool {
     let Some(object) = value.as_object() else {
         return false;
     };
@@ -473,6 +485,40 @@ pub async fn api_process_transcript<R: Runtime>(
     summary_language: Option<String>,
     _auth_token: Option<String>,
 ) -> Result<ProcessTranscriptResponse, String> {
+    start_summary_generation(
+        app,
+        state.db_manager.pool().clone(),
+        text,
+        model,
+        model_name,
+        meeting_id,
+        _chunk_size,
+        _overlap,
+        custom_prompt,
+        template_id,
+        summary_language,
+    )
+    .await
+}
+
+/// Starts summary generation in the background and returns the process id.
+///
+/// This is the shared implementation behind `api_process_transcript`; the local
+/// sync API calls it directly with the saved model configuration.
+#[allow(clippy::too_many_arguments)]
+pub async fn start_summary_generation<R: Runtime>(
+    app: AppHandle<R>,
+    pool: sqlx::SqlitePool,
+    text: String,
+    model: String,
+    model_name: String,
+    meeting_id: Option<String>,
+    _chunk_size: Option<i32>,
+    _overlap: Option<i32>,
+    custom_prompt: Option<String>,
+    template_id: Option<String>,
+    summary_language: Option<String>,
+) -> Result<ProcessTranscriptResponse, String> {
     use uuid::Uuid;
 
     let m_id = meeting_id.unwrap_or_else(|| format!("meeting-{}", Uuid::new_v4()));
@@ -482,7 +528,6 @@ pub async fn api_process_transcript<R: Runtime>(
         &model
     );
 
-    let pool = state.db_manager.pool().clone();
     let final_prompt = custom_prompt.unwrap_or_else(|| "".to_string());
     let final_template_id = template_id.unwrap_or_else(|| "daily_standup".to_string());
 
