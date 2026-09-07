@@ -33,7 +33,7 @@ Meetly, a personal meeting assistant owned by Juraydi al-Mansouri, built from th
 ## Verification results (2026-09-07)
 
 - Frontend tests: 5 pass. Rust unit tests: 19 pass (templates, onboarding, config). App-only `tsc` passes after all changes.
-- Installers: `target/release/bundle/nsis/meetily_0.4.0_x64-setup.exe` (CPU, 04:30) and `Meetly_0.4.0_x64-setup.exe` (CUDA, 06:55, 229 MB; needs the cuBLAS DLLs, which the next build bundles). CUDA build installed to `%LOCALAPPDATA%\Meetly`, launched, log shows "NVIDIA CUDA support: enabled".
+- Installers: `target/release/bundle/nsis/meetily_0.4.0_x64-setup.exe` (CPU, 04:30) and `Meetly_0.4.0_x64-setup.exe` (CUDA, 07:09, 578 MB, cuBLAS DLLs bundled). Installed silently to `%LOCALAPPDATA%\Meetly` and launched without manual DLL copies; log shows "NVIDIA CUDA support: enabled".
 - Onboarding (CPU build): Whisper card shown, `ggml-large-v3-turbo-q5_0.bin` downloaded, `complete_onboarding` saved `localWhisper`.
 - Import speed: 100 s Arabic file took about 13 min on the CPU build (non-native flags) and about 10 s on the CUDA build; 78 s English file well under 1 min on CUDA.
 - Arabic import accuracy (forced `ar` and auto): names, decision, deadline, blocker, and suggestion all correct; one English sentence inside a 22 s Arabic VAD segment is dropped in both modes (Whisper detects one language per segment). Mitigation to try: shorter VAD segments for import/retranscription.
