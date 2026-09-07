@@ -79,3 +79,7 @@ target/
 frontend/src-tauri/binaries/
 # CUDA runtime DLLs copied in by scripts/build-local-windows.ps1 -Gpu cuda
 frontend/src-tauri/cuda/
+
+# iOS SwiftData model sources (the **/models rule above is for AI model files)
+!ios/Meetly/Models/
+!ios/Meetly/Models/**
