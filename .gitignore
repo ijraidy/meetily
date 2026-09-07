@@ -81,5 +81,5 @@ frontend/src-tauri/binaries/
 frontend/src-tauri/cuda/
 
 # iOS SwiftData model sources (the **/models rule above is for AI model files)
-!ios/Meetly/Models/
-!ios/Meetly/Models/**
+!ios/Minuteman/Models/
+!ios/Minuteman/Models/**

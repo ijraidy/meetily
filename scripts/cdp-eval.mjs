@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Minimal Chrome DevTools Protocol client for driving the running Meetily
+// Minimal Chrome DevTools Protocol client for driving the running Minuteman
 // desktop app during manual QA. Launch the app with
 //   WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222
 // then:

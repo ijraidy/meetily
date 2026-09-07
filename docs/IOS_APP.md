@@ -30,7 +30,7 @@ ios/
 ├── fastlane/Appfile, Fastfile  lane `beta` -> signed IPA -> TestFlight
 ├── scripts/make_placeholder_icon.py  writes a solid 1024px icon if none exists
 └── Minuteman/
-    ├── App/            MeetlyApp (SwiftData container + services), ContentView (tabs), MeetingWorkflow
+    ├── App/            MinutemanApp (SwiftData container + services), ContentView (tabs), MeetingWorkflow
     ├── Models/         Meeting, TranscriptSegment, SummaryDocument, SyncOutboxItem (SwiftData)
     ├── Audio/          AudioRecorder (AVAudioEngine -> 16 kHz mono WAV), AudioPlayer, AudioImporter, AudioSessionController
     ├── Transcription/  WhisperKitTranscriber (actor), WhisperModelManager, WhisperModelCatalog, TranscriptionRunner
@@ -177,7 +177,7 @@ certificates". Revoke old "Apple Distribution" certificates in
 1. **Apple Developer Program** membership for Juraydi al-Mansouri (individual
    or organisation). Note the **Team ID** (Membership details page).
 2. **API key**: App Store Connect → Users and Access → *Integrations* →
-   *App Store Connect API* → *Team Keys* → **+**. Name it e.g. `meetly-ci`,
+   *App Store Connect API* → *Team Keys* → **+**. Name it e.g. `minuteman-ci`,
    role **App Manager**. Download the `.p8` file (only offered once) and note
    the **Key ID** and the **Issuer ID** shown at the top of that page.
 3. **App record** (optional — the lane's `produce` step creates it, but you

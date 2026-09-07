@@ -125,6 +125,7 @@ fn download_and_extract_ffmpeg(
 fn get_ffmpeg_url_for_target(target: &str) -> Result<String, String> {
     // Platform-specific URLs
     let url = if target.contains("windows") {
+        // Fallback download source for the FFmpeg static build when no bundled binary exists (third-party release; the Windows build ships its own FFmpeg from frontend/src-tauri/binaries).
         // Windows
         "https://github.com/Zackriya-Solutions/ffmpeg-binaries/releases/download/0.0.1/ffmpeg-8.0.1-essentials_build.zip"
     } else if target.contains("apple") {

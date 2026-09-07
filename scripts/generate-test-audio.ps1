@@ -52,7 +52,7 @@ $script = @(
 )
 
 $englishScript = @(
-    @('en', 'Ahmed', 'This is a test meeting to check the Meetly application. It is not a real meeting. My name is Ahmed and I am the project manager. Sara and Khalid are with us today.'),
+    @('en', 'Ahmed', 'This is a test meeting to check the Minuteman application. It is not a real meeting. My name is Ahmed and I am the project manager. Sara and Khalid are with us today.'),
     @('en', 'Ahmed', 'The goal of this meeting is to review the launch of the new version of the application and follow up on pending tasks.'),
     @('en', 'Ahmed', 'Sara, did you finish the test report?'),
     @('en', 'Sara', 'Yes, I finished the test report yesterday and emailed it to the whole team.'),

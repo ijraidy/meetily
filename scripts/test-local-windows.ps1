@@ -10,7 +10,7 @@ try {
     & node --test tests/lib/arabic-meeting-defaults.test.cjs
     if ($LASTEXITCODE -ne 0) { throw 'Frontend unit tests failed.' }
     Set-Location $repoRoot
-    & cargo test --release --locked -p meetily --lib -- summary::templates onboarding config
+    & cargo test --release --locked -p minuteman --lib -- summary::templates onboarding config
     if ($LASTEXITCODE -ne 0) { throw 'Rust unit tests failed.' }
 } finally {
     Pop-Location

@@ -1,6 +1,6 @@
 # Builds the local AI helper and packages the Windows desktop app as an unsigned
 # NSIS installer using frontend/src-tauri/tauri.local.conf.json.
-# Output: target/release/bundle/nsis/meetily_<version>_x64-setup.exe
+# Output: target/release/bundle/nsis/Minuteman_<version>_x64-setup.exe
 param(
     # GPU backend for whisper.cpp and llama.cpp: 'cpu' (default), 'cuda' (NVIDIA), or 'vulkan'.
     [ValidateSet('cpu','cuda','vulkan')][string]$Gpu = 'cpu'

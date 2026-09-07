@@ -23,3 +23,39 @@ pub async fn open_system_settings(preference_pane: String) -> Result<(), String>
 
     Ok(())
 } 
+/// One-time migration of per-user directories written under the app's previous
+/// name. The models, custom templates and notification settings directories are
+/// keyed by app name (not by the Tauri identifier), so a rename would otherwise
+/// orphan downloaded models and saved preferences. Each old directory is renamed
+/// in place only when the new one does not exist yet; any failure is logged and
+/// ignored so startup is never blocked.
+pub fn migrate_legacy_app_dirs() {
+    const OLD_DATA_DIR: &str = "Meetily"; // former app name (data/models/templates)
+    const OLD_CONFIG_DIR: &str = "meetily"; // former app name (notification settings)
+
+    let candidates = [
+        (dirs::data_dir(), OLD_DATA_DIR, "Minuteman"),
+        (dirs::config_dir(), OLD_CONFIG_DIR, "minuteman"),
+    ];
+
+    for (base, old_name, new_name) in candidates {
+        let Some(base) = base else { continue };
+        let old_path = base.join(old_name);
+        let new_path = base.join(new_name);
+        if !old_path.is_dir() || new_path.exists() {
+            continue;
+        }
+        match std::fs::rename(&old_path, &new_path) {
+            Ok(()) => log::info!(
+                "Migrated legacy app directory {} -> {}",
+                old_path.display(),
+                new_path.display()
+            ),
+            Err(e) => log::warn!(
+                "Could not migrate legacy app directory {}: {}",
+                old_path.display(),
+                e
+            ),
+        }
+    }
+}

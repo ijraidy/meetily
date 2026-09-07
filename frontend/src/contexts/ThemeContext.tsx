@@ -12,7 +12,7 @@ import React, {
 export type Theme = 'dark' | 'light';
 
 /** localStorage key used to persist the user's appearance choice. */
-export const THEME_STORAGE_KEY = 'meetly.theme';
+export const THEME_STORAGE_KEY = 'minuteman.theme';
 
 /** Dark is the brand default when nothing has been saved yet. */
 export const DEFAULT_THEME: Theme = 'dark';

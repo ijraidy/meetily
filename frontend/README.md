@@ -1,4 +1,4 @@
-# Meetily - Frontend
+# Minuteman - Frontend
 
 A modern desktop application for recording, transcribing, and analyzing meetings with AI assistance. Built with Next.js and Tauri for a native desktop experience.
 
@@ -59,12 +59,11 @@ A modern desktop application for recording, transcribing, and analyzing meetings
    xcode-select --install
    ```
 
-2. Clone the repository and navigate to the frontend directory:
+2. Navigate to the frontend directory of this repository:
    ```bash
-   git clone https://github.com/Zackriya-Solutions/meeting-minutes
-   cd meeting-minutes/frontend
+   cd frontend
    ```
-  
+
 
 3. Install dependencies:
    ```bash
@@ -79,10 +78,9 @@ A modern desktop application for recording, transcribing, and analyzing meetings
    - Install pnpm: `npm install -g pnpm`
    - Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with C++ development tools
 
-2. Clone the repository and navigate to the frontend directory:
+2. Navigate to the frontend directory of this repository:
    ```cmd
-   git clone https://github.com/Zackriya-Solutions/meeting-minutes
-   cd meeting-minutes/frontend
+   cd frontend
    ```
 
 3. Install dependencies:
@@ -129,7 +127,7 @@ pnpm run tauri:build
 
 ## Local Transcription
 
-Current Meetily does not require a separate FastAPI service, Docker backend, or manually started whisper-server process. Local transcription is handled by the Rust/Tauri desktop app.
+Minuteman does not require a separate FastAPI service, Docker backend, or manually started whisper-server process. Local transcription is handled by the Rust/Tauri desktop app.
 
 For build and acceleration details, see:
 
@@ -162,14 +160,6 @@ For build and acceleration details, see:
 - If you encounter build errors, ensure Visual Studio Build Tools are properly installed
 - For audio capture issues, check Windows privacy settings for microphone access
 - If the app fails to start, try running Command Prompt as administrator
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
 
 ## License
 

@@ -11,9 +11,9 @@ Last updated 2026-09-07 10:20 (Asia/Riyadh). App name is now **Minuteman** (iden
 
 ## What the app is now
 
-Minuteman, a personal meeting assistant owned by Juraydi al-Mansouri, built from the Meetily fork:
+Minuteman, a personal meeting assistant owned by Juraydi al-Mansouri, built from the upstream open-source fork:
 
-- **Branding:** productName `Minuteman`, identifier `com.ijraidy.minuteman`, window title and tray "Minuteman", About page rewritten (`frontend/src/components/About.tsx`). PostHog analytics permanently disabled (Rust `analytics/commands.rs` never creates a client; `lib/analytics.ts` is an inert facade; consent UI removed). Updater never checks (`UpdateCheckProvider`, `useUpdateCheck`, `updateService` no-ops; `tauri.conf.json` endpoints empty). Zackriya marketing/links removed from the UI (the Parakeet model mirror URL in `parakeet_engine.rs` is left as a model source).
+- **Branding:** productName `Minuteman`, identifier `com.ijraidy.minuteman`, window title and tray "Minuteman", About page rewritten (`frontend/src/components/About.tsx`). PostHog analytics permanently disabled (Rust `analytics/commands.rs` never creates a client; `lib/analytics.ts` is an inert facade; consent UI removed). Updater never checks (`UpdateCheckProvider`, `useUpdateCheck`, `updateService` no-ops; `tauri.conf.json` endpoints empty). Zackriya marketing/links removed from the UI (the Parakeet v3 download now points at the public Hugging Face mirror).
 - **Dark mode default** with Light/Dark toggle in Settings > General (`contexts/ThemeContext.tsx`, `components/ThemeToggle.tsx`, `html.dark` override layer in `app/globals.css`, BlockNote and sonner themed).
 - **Languages:** transcription defaults to automatic detection (English, Arabic, mixed). Summary language follows the meeting unless pinned. Arabic-forced defaults were removed after user testing showed English speech being transcribed as Arabic.
 - **Speech engine:** multilingual Whisper `large-v3-turbo-q5_0` installed during onboarding instead of Parakeet (no Arabic in Parakeet v3). Models are chosen/downloaded/switched in Settings > Transcription and Settings > Summary (verified: user downloaded 9 Whisper models and all 4 built-in summary models and switched between them).
@@ -33,7 +33,7 @@ Minuteman, a personal meeting assistant owned by Juraydi al-Mansouri, built from
 ## Verification results (2026-09-07)
 
 - Frontend tests: 5 pass. Rust unit tests: 19 pass (templates, onboarding, config). App-only `tsc` passes after all changes.
-- Installers: `target/release/bundle/nsis/meetily_0.4.0_x64-setup.exe` (CPU, 04:30) and `Meetly_0.4.0_x64-setup.exe` (CUDA, 07:09, 578 MB, cuBLAS DLLs bundled). Installed silently to `%LOCALAPPDATA%\Minuteman` and launched without manual DLL copies; log shows "NVIDIA CUDA support: enabled".
+- Installers: earlier CPU/CUDA installers (superseded) and `Minuteman_0.4.0_x64-setup.exe` (CUDA, cuBLAS DLLs bundled). Installed silently to `%LOCALAPPDATA%\Minuteman` and launched without manual DLL copies; log shows "NVIDIA CUDA support: enabled".
 - Onboarding (CPU build): Whisper card shown, `ggml-large-v3-turbo-q5_0.bin` downloaded, `complete_onboarding` saved `localWhisper`.
 - Import speed: 100 s Arabic file took about 13 min on the CPU build (non-native flags) and about 10 s on the CUDA build; 78 s English file well under 1 min on CUDA.
 - Arabic import accuracy (forced `ar` and auto): names, decision, deadline, blocker, and suggestion all correct; one English sentence inside a 22 s Arabic VAD segment is dropped in both modes (Whisper detects one language per segment). Mitigation to try: shorter VAD segments for import/retranscription.
@@ -53,7 +53,7 @@ Minuteman, a personal meeting assistant owned by Juraydi al-Mansouri, built from
 ## Open items
 
 - iPhone: user wants a full iPhone app with sync and online meetings; iPhone model/iOS, Mac availability, and Apple Developer account are still unanswered. No iOS source, sync service, or meeting integration exists. `docs/IPHONE_PLAN.md` has the researched design and the desktop parity checklist.
-- Old CPU install `%LOCALAPPDATA%\meetily` (identifier `com.meetily.ai`) is still installed and was running as the user's instance; uninstall it once the user confirms. App data was copied to `%APPDATA%\com.ijraidy.minuteman` (15.8 GB) so the renamed app kept models and meetings.
+- Old CPU install `%LOCALAPPDATA%\meetily` (old CPU install, identifier `com.meetily.ai`) is still installed and was running as the user's instance; uninstall it once the user confirms. App data was copied to `%APPDATA%\com.ijraidy.minuteman` (15.8 GB) so the renamed app kept models and meetings.
 - Summary prompt tuning (completed tasks, unassigned tasks, no invented priority); VAD segment length for code-switched speech; recording stop timeout/double save; playback UI; file export.
 
 ## Next command
@@ -62,4 +62,7 @@ Minuteman, a personal meeting assistant owned by Juraydi al-Mansouri, built from
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build-local-windows.ps1 -Gpu cuda
 ```
 
-Then install `target\release\bundle\nsis\Meetly_0.4.0_x64-setup.exe` and confirm it starts without copying DLLs manually.
+Then install `targeteleaseundle
+sis\Minuteman_0.4.0_x64-setup.exe`.
+eleasebundle
+sisMinuteman_0.4.0_x64-setup.exe`.

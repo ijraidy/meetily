@@ -81,9 +81,6 @@ export default function About() {
         </p>
       </section>
 
-      <footer className="text-xs text-gray-500 border-t border-gray-200 pt-4">
-        Based on the open-source Meetily project (MIT License) with local modifications by {OWNER}.
-      </footer>
     </div>
   );
 }

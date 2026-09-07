@@ -4,7 +4,7 @@ Transcription defaults to automatic language detection so English, Arabic, and m
 
 ## Speech engine
 
-Upstream Meetily installs the NVIDIA Parakeet TDT 0.6B v3 engine during onboarding. Parakeet v3 covers 25 European languages and has no Arabic support, so this build changes the default speech engine to local multilingual Whisper:
+The NVIDIA Parakeet TDT 0.6B v3 engine covers 25 European languages and has no Arabic support, so Minuteman's default speech engine is local multilingual Whisper:
 
 - Onboarding downloads `large-v3-turbo-q5_0` (about 547 MB) from the whisper.cpp model repository instead of Parakeet.
 - The default transcription provider saved at the end of onboarding is `localWhisper` with that model. Rust and TypeScript defaults (`DEFAULT_WHISPER_MODEL`) point at the same model so import, re-transcription, and recording agree.
@@ -44,8 +44,8 @@ Run from the repository root:
 Verification history:
 
 - 2026-09-06: four language-preference tests passed, application-only TypeScript checking passed.
-- 2026-09-07: first Windows installer built successfully (`meetily_0.4.0_x64-setup.exe`). Application-only TypeScript checking passed again after the Whisper-first onboarding and text-direction changes. See `HANDOFF.md` for the current runtime verification status of Arabic transcription, summaries, and checklist persistence.
+- 2026-09-07: first Windows installer built successfully (`Minuteman_0.4.0_x64-setup.exe`). Application-only TypeScript checking passed again after the Whisper-first onboarding and text-direction changes. See `HANDOFF.md` for the current runtime verification status of Arabic transcription, summaries, and checklist persistence.
 
-Full TypeScript checking still reports missing `bun:test` typings in the upstream tests; use `tsconfig.build.json` for application code.
+Full TypeScript checking still reports missing `bun:test` typings in the inherited test files; use `tsconfig.build.json` for application code.
 
 Manual acceptance: import `TEST-DATA-arabic-meeting.wav` or record a short Arabic meeting containing one assigned task, one unassigned task, one explicit deadline, a completed task, and an unresolved suggestion. Generate the action-plan summary in Arabic. Confirm names and dates match the recording, missing fields stay unspecified, completed checkboxes stay checked, and proposals remain distinct from agreed work. Save, reopen, and verify the checklist remains editable.

@@ -83,7 +83,7 @@ actor WhisperKitTranscriber {
         }
     }
 
-    private static let completionMarker = ".meetly-ready"
+    private static let completionMarker = ".minuteman-ready"
 
     private var pipeline: WhisperKit?
     private(set) var loadedModelId: String?
