@@ -5,9 +5,9 @@ Last updated 2026-09-07 10:20 (Asia/Riyadh). App name is now **Minuteman** (iden
 ## Workspace, branch, remotes
 
 - Workspace: `C:\Users\COF_J\Desktop\Minuteman`
-- Working branch: `feature/arabic-meeting-actions`, based on `upstream/devtest`.
+- Working branch: `feature/arabic-meeting-actions` (tracks `origin/feature/arabic-meeting-actions`).
 - `origin` = the user's fork `https://github.com/ijraidy/meetily.git` (the only push target).
-- `upstream` = `https://github.com/Zackriya-Solutions/meetily.git` with push URL disabled (`no_push`). Never contribute this work upstream.
+- No other remote exists (the original project's remote was removed on 2026-09-08 at the owner's request).
 
 ## What the app is now
 

@@ -4,7 +4,7 @@ Guidance for Claude Code when working in this repository.
 
 ## What this is
 
-**Minuteman** is Juraydi al-Mansouri's private meeting assistant (not distributed). Read `HANDOFF.md` first: it holds the current state, verification results, and next steps. Git: `origin` is the owner's fork (the only push target, push only with explicit authorization); `upstream` has its push URL disabled and must never receive contributions.
+**Minuteman** is Juraydi al-Mansouri's meeting assistant (Windows + iPhone; Android/web planned). Read `HANDOFF.md` first: it holds the current state, verification results, and next steps. Git: `origin` (https://github.com/ijraidy/meetily) is the only remote and the only push target; push only with explicit authorization. Never add the original project's remote back or contribute to it.
 
 ## Components
 
