@@ -54,7 +54,9 @@ Minuteman, a personal meeting assistant owned by Juraydi al-Mansouri, built from
 - **Onboarding**: `complete_onboarding` now records verified readiness instead of hardcoding "downloaded"; fresh-database seed uses `localWhisper` + `DEFAULT_WHISPER_MODEL` (was Parakeet); the meeting page no longer auto-selects an Ollama `gemma3:1b` model on an empty config.
 - **About**: developer section (GitHub, email), Get Minuteman section (Windows, iPhone TestFlight, Android coming soon); attribution footer removed at the owner's request (restore the MIT notice in a LICENSE file before any public distribution).
 - **Icons**: owner-supplied artwork in `branding/`; Windows set generated with `tauri icon` (`icons/icon.ico|icns|png`), iOS `Icon-1024.png` flattened onto black and committed (Fastfile only generates a placeholder when it is missing).
-- Frontend tests: 18 pass. Verification of the runtime after the rebuild is recorded below when done.
+- Frontend tests: 18 pass. Full Rust suite: 287 pass (2 ignored).
+- Runtime verification 2026-09-08 on the rebuilt CUDA installer (05:11 build, installed and launched): CUDA enabled, sync API listening, dark theme; meeting page shows the playback bar (played 00:02/00:03 with the active segment highlighted) and the Export button; the owner's live recording on this build saved exactly one meeting row with its folder path (no duplicate). Still not exercised by hand: export save dialog, QR tab screenshot (the owner was recording while I checked), engine-contention stop path.
+- Sidebar/in-app logo PNGs in `frontend/public` regenerated from `branding/icon-windows.png` (build following the 05:11 installer).
 
 ## iPhone app and sync (added 2026-09-07 evening)
 
