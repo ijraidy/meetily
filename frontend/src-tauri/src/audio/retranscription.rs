@@ -2,7 +2,10 @@
 
 use crate::audio::decoder::decode_audio_file;
 use crate::audio::vad::get_speech_chunks_with_progress;
-use super::common::{create_transcript_segments, split_segment_at_silence, write_transcripts_json};
+use super::common::{
+    create_transcript_segments, segment_split_policy, split_segment_with_policy,
+    write_transcripts_json,
+};
 use super::constants::AUDIO_EXTENSIONS;
 use crate::config::{DEFAULT_WHISPER_MODEL, DEFAULT_PARAKEET_MODEL};
 use crate::parakeet_engine::ParakeetEngine;
@@ -97,6 +100,19 @@ pub async fn start_retranscription<R: Runtime>(
 ) -> Result<RetranscriptionResult> {
     // Acquire guard - ensures flag is cleared even on panic/early return
     let _guard = RetranscriptionGuard::acquire().map_err(|e| anyhow!(e))?;
+
+    // The live recording shares the global engine; running both at once lets
+    // each side (re)load/unload the model under the other and starves the
+    // recording's stop tail (mirror of `batch_job_blocking_start`).
+    if super::recording_commands::is_recording().await {
+        let msg = "Cannot retranscribe while a recording is in progress. Stop the recording first.";
+        warn!("{}", msg);
+        let _ = app.emit(
+            "retranscription-error",
+            RetranscriptionError { meeting_id: meeting_id.clone(), error: msg.to_string() },
+        );
+        return Err(anyhow!(msg));
+    }
 
     // Reset cancellation flag
     RETRANSCRIPTION_CANCELLED.store(false, Ordering::SeqCst);
@@ -310,21 +326,33 @@ async fn run_retranscription<R: Runtime>(
         None
     };
 
-    // Split very long segments at silence boundaries for better transcription quality.
+    // Split long segments at silence boundaries for better transcription quality.
     // Hard cuts at arbitrary sample positions lose words at boundaries. Instead, scan
     // for the lowest-energy window near the target split point and cut there.
-    const MAX_SEGMENT_SAMPLES: usize = 25 * 16000; // 25 seconds at 16kHz
+    //
+    // With automatic language detection Whisper picks one language per call, so
+    // a ~22s VAD segment that switches language mid-way loses the other-language
+    // sentence entirely. The auto policy therefore cuts into ~8s pieces (12s cap)
+    // so each sentence gets its own detection; a forced language keeps 25s pieces.
+    let split_policy = segment_split_policy(language.as_deref(), use_parakeet);
+    info!(
+        "Segment split policy: max={:.1}s target={:.1}s (language={:?}, parakeet={})",
+        split_policy.max_samples as f64 / 16000.0,
+        split_policy.target_samples as f64 / 16000.0,
+        language,
+        use_parakeet
+    );
 
     let mut processable_segments: Vec<crate::audio::vad::SpeechSegment> = Vec::new();
     for segment in &speech_segments {
-        if segment.samples.len() > MAX_SEGMENT_SAMPLES {
+        if segment.samples.len() > split_policy.max_samples {
             debug!(
                 "Splitting large segment ({:.0}ms, {} samples) at silence boundaries",
                 segment.end_timestamp_ms - segment.start_timestamp_ms,
                 segment.samples.len()
             );
 
-            let sub_segments = split_segment_at_silence(segment, MAX_SEGMENT_SAMPLES);
+            let sub_segments = split_segment_with_policy(segment, &split_policy);
             debug!("Split into {} sub-segments", sub_segments.len());
             processable_segments.extend(sub_segments);
         } else {

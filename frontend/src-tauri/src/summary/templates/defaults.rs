@@ -72,6 +72,66 @@ mod tests {
         assert!(list_builtin_template_ids().contains(&"meeting_action_plan"));
     }
 
+    /// The action-plan template must keep the rules that fixed the 2026-09-07
+    /// defects: completed tasks as checked boxes, unassigned tasks kept in the
+    /// checklist with "Owner: Not specified", no invented priority, and
+    /// suggestions kept out of decisions and tasks.
+    #[test]
+    fn test_action_plan_section_rules_cover_known_defects() {
+        let template: crate::summary::templates::Template =
+            serde_json::from_str(get_builtin_template("meeting_action_plan").unwrap()).unwrap();
+        let titles: Vec<&str> = template.sections.iter().map(|s| s.title.as_str()).collect();
+        assert_eq!(
+            titles,
+            vec![
+                "Meeting Summary",
+                "Decisions",
+                "Task Checklist",
+                "Action Plan",
+                "Open Questions and Blockers"
+            ]
+        );
+
+        let section = |title: &str| {
+            template
+                .sections
+                .iter()
+                .find(|s| s.title == title)
+                .unwrap_or_else(|| panic!("missing section {title}"))
+        };
+
+        let checklist = section("Task Checklist");
+        assert!(checklist.instruction.contains("- [x]"));
+        assert!(checklist.instruction.contains("a finished task must never be omitted"));
+        assert!(checklist.instruction.contains("Owner: Not specified"));
+        assert!(checklist
+            .instruction
+            .contains("never move an unassigned task to Open Questions and Blockers"));
+        assert!(checklist.instruction.contains("is not a task"));
+        assert!(checklist.instruction.contains("never convert them to calendar dates"));
+        assert!(checklist
+            .instruction
+            .contains("Do not invent tasks, names, dates, timestamps, or completion status"));
+        let item_format = checklist.item_format.as_deref().unwrap();
+        assert!(item_format.starts_with("- [x] "));
+        assert!(item_format.contains("- [ ] Open task"));
+        assert!(item_format.contains("Owner: name or Not specified"));
+
+        let plan = section("Action Plan");
+        assert!(plan.instruction.contains("never assign a priority level yourself"));
+        assert!(plan.instruction.contains("Do not repeat completed tasks"));
+        assert!(plan.instruction.contains("do not invent a strategy or schedule"));
+
+        let decisions = section("Decisions");
+        assert!(decisions.instruction.contains("explicitly agreed"));
+        assert!(decisions
+            .instruction
+            .contains("Suggestions that were not agreed, unresolved questions, and task assignments are not decisions"));
+
+        let open = section("Open Questions and Blockers");
+        assert!(open.instruction.contains("is not an open question"));
+    }
+
     #[test]
     fn test_get_builtin_template() {
         assert!(get_builtin_template("daily_standup").is_some());

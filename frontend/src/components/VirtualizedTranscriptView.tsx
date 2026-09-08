@@ -34,6 +34,11 @@ export interface VirtualizedTranscriptViewProps {
     totalCount?: number;
     loadedCount?: number;
     onLoadMore?: () => void;
+
+    /** Called when a timestamp is clicked (seconds from recording start). */
+    onSeek?: (seconds: number) => void;
+    /** Segment currently being played back; rendered with a highlight. */
+    activeSegmentId?: string | null;
 }
 
 // Threshold for enabling virtualization (below this, use simple rendering)
@@ -71,6 +76,8 @@ const TranscriptSegment = memo(function TranscriptSegment({
     confidence,
     isStreaming,
     showConfidence,
+    onSeek,
+    isActive = false,
 }: {
     id: string;
     timestamp: number;
@@ -78,18 +85,38 @@ const TranscriptSegment = memo(function TranscriptSegment({
     confidence?: number;
     isStreaming: boolean;
     showConfidence: boolean;
+    onSeek?: (seconds: number) => void;
+    isActive?: boolean;
 }) {
     const displayText = cleanStopWords(text) || (text.trim() === '' ? '[Silence]' : text);
+    const timeLabel = formatRecordingTime(timestamp);
 
     return (
-        <div id={`segment-${id}`} className="mb-3">
+        <div
+            id={`segment-${id}`}
+            data-active={isActive ? 'true' : undefined}
+            className={`mb-3 -mx-2 rounded-md px-2 py-0.5 transition-colors ${isActive ? 'bg-blue-50' : ''}`}
+        >
             <div className="flex items-start gap-2">
                 <Tooltip>
-                    <TooltipTrigger>
-                        <span className="text-xs text-gray-400 mt-1 flex-shrink-0 min-w-[50px]">
-                            {formatRecordingTime(timestamp)}
-                        </span>
-                    </TooltipTrigger>
+                    {onSeek ? (
+                        <TooltipTrigger asChild>
+                            <button
+                                type="button"
+                                onClick={() => onSeek(timestamp)}
+                                className={`mt-1 min-w-[50px] flex-shrink-0 rounded text-left text-xs tabular-nums hover:text-blue-600 hover:underline focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 ${isActive ? 'text-blue-600' : 'text-gray-400'}`}
+                                aria-label={`Play recording from ${timeLabel}`}
+                            >
+                                {timeLabel}
+                            </button>
+                        </TooltipTrigger>
+                    ) : (
+                        <TooltipTrigger>
+                            <span className="text-xs text-gray-400 mt-1 flex-shrink-0 min-w-[50px]">
+                                {timeLabel}
+                            </span>
+                        </TooltipTrigger>
+                    )}
                     <TooltipContent>
                         {confidence !== undefined && showConfidence && (
                             <ConfidenceIndicator confidence={confidence} showIndicator={showConfidence} />
@@ -124,6 +151,8 @@ export const VirtualizedTranscriptView: React.FC<VirtualizedTranscriptViewProps>
     totalCount = 0,
     loadedCount = 0,
     onLoadMore,
+    onSeek,
+    activeSegmentId = null,
 }) => {
     // Create scroll ref first - shared between virtualizer and auto-scroll hook
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -296,6 +325,8 @@ export const VirtualizedTranscriptView: React.FC<VirtualizedTranscriptViewProps>
                                         confidence={segment.confidence}
                                         isStreaming={isStreaming}
                                         showConfidence={showConfidence}
+                                        onSeek={onSeek}
+                                        isActive={activeSegmentId === segment.id}
                                     />
                                 </div>
                             );
@@ -352,6 +383,8 @@ export const VirtualizedTranscriptView: React.FC<VirtualizedTranscriptViewProps>
                                         confidence={segment.confidence}
                                         isStreaming={isStreaming}
                                         showConfidence={showConfidence}
+                                        onSeek={onSeek}
+                                        isActive={activeSegmentId === segment.id}
                                     />
                                 </motion.div>
                             );

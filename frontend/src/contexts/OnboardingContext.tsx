@@ -457,8 +457,17 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       }
 
       // Onboarding always uses builtin-ai with selected model
+      let speechReady = speechModelDownloaded;
+      try {
+        await invoke('whisper_init');
+        speechReady = await invoke<boolean>('whisper_has_available_models');
+      } catch (error) {
+        console.warn('[OnboardingContext] Could not verify the speech model at completion:', error);
+      }
       await invoke('complete_onboarding', {
         model: modelToSave,
+        speechModelReady: speechReady,
+        summaryModelReady: selectedModelReady,
       });
       setCompleted(true);
       console.log('[OnboardingContext] Onboarding completed with model:', modelToSave);

@@ -1,275 +1,230 @@
-import { useState, useEffect, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+'use client';
 
-export const useAudioPlayer = (audioPath: string | null) => {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const audioRef = useRef<AudioContext | null>(null);
-  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
-  const startTimeRef = useRef<number>(0);
-  const audioBufferRef = useRef<AudioBuffer | null>(null);
-  const rafRef = useRef<number>();
-  const seekTimeRef = useRef<number>(0);
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 
-  const initAudioContext = async () => {
-    try {
-      if (!audioRef.current) {
-        console.log('Creating new AudioContext');
-        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-        audioRef.current = new AudioContextClass();
-        console.log('AudioContext created:', {
-          state: audioRef.current.state,
-          sampleRate: audioRef.current.sampleRate,
-        });
-      }
+/**
+ * Playback for a meeting's local recording.
+ *
+ * The Rust side (`get_meeting_audio_path`) resolves the audio file inside the
+ * meeting folder and whitelists it for the asset protocol; the webview then
+ * streams it through an HTMLAudioElement via `convertFileSrc`. Streaming keeps
+ * memory flat for multi-hour recordings (range requests, no decodeAudioData)
+ * and gives us native seeking.
+ *
+ * `currentTime` in the returned state follows the element's `timeupdate`
+ * event (~4 Hz) so the rest of the page re-renders sparingly; UI that wants a
+ * smooth read-out (the seek slider) can poll `getCurrentTime()` on its own
+ * animation frame.
+ */
 
-      if (audioRef.current.state === 'suspended') {
-        console.log('Resuming suspended AudioContext');
-        await audioRef.current.resume();
-        console.log('AudioContext resumed:', audioRef.current.state);
-      }
-      
-      setError(null);
-      return true;
-    } catch (error) {
-      console.error('Error initializing AudioContext:', error);
-      setError('Failed to initialize audio');
-      return false;
-    }
-  };
+export type AudioPlayerStatus =
+  | 'idle'        // no meeting selected
+  | 'loading'     // resolving the file / fetching metadata
+  | 'ready'       // playable
+  | 'unavailable' // meeting has no local audio (e.g. synced from another device)
+  | 'error';      // file exists but cannot be played
 
-  // Cleanup function
-  useEffect(() => {
-    return () => {
-      console.log('Cleaning up audio resources');
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-      }
-      if (sourceRef.current) {
-        sourceRef.current.stop();
-      }
-      if (audioRef.current) {
-        audioRef.current.close();
-      }
-    };
+export interface MeetingAudioInfo {
+  path: string;
+  file_name: string;
+  size_bytes: number;
+}
+
+export interface AudioPlayerState {
+  status: AudioPlayerStatus;
+  isPlaying: boolean;
+  currentTime: number;
+  duration: number;
+  error: string | null;
+  fileName: string | null;
+}
+
+export interface AudioPlayerControls {
+  play: () => Promise<void>;
+  pause: () => void;
+  toggle: () => Promise<void>;
+  /** Jump to a position (seconds). Optionally start playback afterwards. */
+  seek: (seconds: number, options?: { play?: boolean }) => Promise<void>;
+  /** Precise position straight from the media element (no re-render). */
+  getCurrentTime: () => number;
+  /** Re-run file resolution (after an error or once a recording finishes). */
+  reload: () => void;
+}
+
+export type AudioPlayer = AudioPlayerState & AudioPlayerControls;
+
+const INITIAL_STATE: AudioPlayerState = {
+  status: 'idle',
+  isPlaying: false,
+  currentTime: 0,
+  duration: 0,
+  error: null,
+  fileName: null,
+};
+
+function describeMediaError(audio: HTMLAudioElement): string {
+  switch (audio.error?.code) {
+    case MediaError.MEDIA_ERR_ABORTED:
+      return 'Playback was interrupted';
+    case MediaError.MEDIA_ERR_NETWORK:
+      return 'The recording could not be read';
+    case MediaError.MEDIA_ERR_DECODE:
+      return 'The recording could not be decoded';
+    case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+      return 'This audio format is not supported for playback';
+    default:
+      return 'The recording could not be played';
+  }
+}
+
+function clampTime(seconds: number, duration: number): number {
+  if (!Number.isFinite(seconds) || seconds < 0) return 0;
+  if (Number.isFinite(duration) && duration > 0 && seconds > duration) return duration;
+  return seconds;
+}
+
+export function useAudioPlayer(meetingId: string | null | undefined): AudioPlayer {
+  const [state, setState] = useState<AudioPlayerState>(INITIAL_STATE);
+  const [reloadToken, setReloadToken] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const pendingSeekRef = useRef<{ seconds: number; play: boolean } | null>(null);
+
+  const patch = useCallback((update: Partial<AudioPlayerState>) => {
+    setState((prev) => ({ ...prev, ...update }));
   }, []);
 
-  const loadAudio = async () => {
-    if (!audioPath) {
-      console.log('No audio path provided');
-      return;
-    }
-
-    try {
-      // Initialize context first
-      const initialized = await initAudioContext();
-      if (!initialized || !audioRef.current) {
-        console.error('Failed to initialize audio context');
-        return;
-      }
-
-      console.log('Loading audio from:', audioPath);
-      
-      // Read the file using Tauri command
-      const result = await invoke<number[]>('read_audio_file', { 
-        filePath: audioPath 
-      });
-      
-      if (!result || result.length === 0) {
-        throw new Error('Empty audio data received');
-      }
-      
-      console.log('Audio file read, size:', result.length, 'bytes');
-      
-      // Create a copy of the audio data
-      const audioData = new Uint8Array(result).buffer;
-      
-      console.log('Created audio buffer, size:', audioData.byteLength, 'bytes');
-      
-      // Decode the audio data
-      const audioBuffer = await new Promise<AudioBuffer>((resolve, reject) => {
-        audioRef.current!.decodeAudioData(
-          audioData,
-          buffer => {
-            console.log('Audio decoded successfully:', {
-              duration: buffer.duration,
-              sampleRate: buffer.sampleRate,
-              numberOfChannels: buffer.numberOfChannels,
-              length: buffer.length
-            });
-            resolve(buffer);
-          },
-          error => {
-            console.error('Audio decoding failed:', error);
-            reject(new Error('Failed to decode audio data: ' + error));
-          }
-        );
-      });
-      
-      audioBufferRef.current = audioBuffer;
-      setDuration(audioBuffer.duration);
-      setCurrentTime(0);
-      setError(null);
-      console.log('Audio loaded and ready to play');
-    } catch (error) {
-      console.error('Error loading audio:', error);
-      if (error instanceof Error) {
-        console.error('Error details:', {
-          message: error.message,
-          name: error.name,
-          stack: error.stack,
-        });
-      }
-      setError('Failed to load audio file');
-    }
-  };
-
-  // Load audio when path changes
   useEffect(() => {
-    console.log('Audio path changed:', audioPath);
-    if (audioPath) {
-      loadAudio();
+    let cancelled = false;
+    pendingSeekRef.current = null;
+    setState(INITIAL_STATE);
+
+    if (!meetingId) {
+      return undefined;
     }
-  }, [audioPath]);
 
-  const stopPlayback = () => {
-    console.log('Stopping playback');
-    if (rafRef.current) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = undefined;
-    }
-    if (sourceRef.current) {
-      try {
-        sourceRef.current.stop();
-        sourceRef.current.disconnect();
-      } catch (e) {
-        console.log('Error stopping source:', e);
-      }
-      sourceRef.current = null;
-    }
-    setIsPlaying(false);
-  };
+    patch({ status: 'loading' });
 
-  const play = async () => {
-    console.log('Play requested');
-    
-    try {
-      // Initialize context if needed
-      const initialized = await initAudioContext();
-      if (!initialized) {
-        throw new Error('Audio context initialization failed');
-      }
-      if (!audioRef.current) {
-        throw new Error('Audio context is null after initialization');
-      }
-      if (!audioBufferRef.current) {
-        throw new Error('No audio buffer loaded - try loading the audio file first');
-      }
-      if (audioRef.current.state !== 'running') {
-        throw new Error(`Audio context is in invalid state: ${audioRef.current.state}`);
-      }
+    let audio: HTMLAudioElement | null = null;
+    const listeners: Array<[string, EventListener]> = [];
 
-      // Stop any existing playback
-      stopPlayback();
+    const attach = (info: MeetingAudioInfo) => {
+      const element = new Audio();
+      element.preload = 'metadata';
+      audio = element;
+      audioRef.current = element;
 
-      // Create and setup new source
-      console.log('Creating new audio source');
-      sourceRef.current = audioRef.current.createBufferSource();
-      sourceRef.current.buffer = audioBufferRef.current;
-      
-      console.log('Audio buffer details:', {
-        duration: audioBufferRef.current.duration,
-        sampleRate: audioBufferRef.current.sampleRate,
-        numberOfChannels: audioBufferRef.current.numberOfChannels,
-        length: audioBufferRef.current.length
-      });
-      
-      sourceRef.current.connect(audioRef.current.destination);
-      
-      // Setup ended callback
-      sourceRef.current.onended = () => {
-        console.log('Playback ended naturally');
-        stopPlayback();
-        setCurrentTime(0);
+      const on = (event: string, handler: EventListener) => {
+        element.addEventListener(event, handler);
+        listeners.push([event, handler]);
       };
-      
-      // Start playback from the seek time
-      const startTime = seekTimeRef.current;
-      startTimeRef.current = audioRef.current.currentTime - startTime;
-      console.log('Starting playback', {
-        startTime,
-        contextTime: audioRef.current.currentTime,
-        seekTime: seekTimeRef.current
-      });
-      
-      sourceRef.current.start(0, startTime);
-      setIsPlaying(true);
-      setError(null);
 
-      // Setup time update
-      const updateTime = () => {
-        if (!audioRef.current || !sourceRef.current) {
-          console.log('Update cancelled - context or source is null');
+      const readDuration = () => (Number.isFinite(element.duration) ? element.duration : 0);
+
+      on('loadedmetadata', () => {
+        patch({ status: 'ready', duration: readDuration(), error: null });
+        const pending = pendingSeekRef.current;
+        if (pending) {
+          pendingSeekRef.current = null;
+          element.currentTime = clampTime(pending.seconds, element.duration);
+          patch({ currentTime: element.currentTime });
+          if (pending.play) {
+            void element.play().catch((err) => {
+              console.error('Audio playback failed:', err);
+              patch({ error: 'Playback could not start' });
+            });
+          }
+        }
+      });
+      on('durationchange', () => patch({ duration: readDuration() }));
+      on('timeupdate', () => patch({ currentTime: element.currentTime }));
+      on('seeked', () => patch({ currentTime: element.currentTime }));
+      on('play', () => patch({ isPlaying: true, error: null }));
+      on('pause', () => patch({ isPlaying: false, currentTime: element.currentTime }));
+      on('ended', () => patch({ isPlaying: false, currentTime: readDuration() }));
+      on('error', () => {
+        console.error('Audio element error:', element.error);
+        patch({ status: 'error', isPlaying: false, error: describeMediaError(element) });
+      });
+
+      patch({ fileName: info.file_name });
+      element.src = convertFileSrc(info.path);
+      element.load();
+    };
+
+    invoke<MeetingAudioInfo | null>('get_meeting_audio_path', { meetingId })
+      .then((info) => {
+        if (cancelled) return;
+        if (!info) {
+          patch({ status: 'unavailable' });
           return;
         }
-        
-        const newTime = audioRef.current.currentTime - startTimeRef.current;
-        
-        if (newTime >= duration) {
-          console.log('Playback finished');
-          stopPlayback();
-          setCurrentTime(0);
-          seekTimeRef.current = 0;
-        } else {
-          setCurrentTime(newTime);
-          seekTimeRef.current = newTime;
-          rafRef.current = requestAnimationFrame(updateTime);
-        }
-      };
-      
-      rafRef.current = requestAnimationFrame(updateTime);
-    } catch (error) {
-      console.error('Error during playback:', error);
-      setError('Failed to play audio');
-      stopPlayback();
-    }
-  };
+        attach(info);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('Failed to resolve meeting audio:', err);
+        patch({ status: 'error', error: typeof err === 'string' ? err : 'Could not locate the recording' });
+      });
 
-  const seek = async (time: number) => {
-    console.log('Seek requested:', time);
-    if (time < 0) time = 0;
-    if (time > duration) time = duration;
-    
-    const wasPlaying = isPlaying;
-    
-    // Stop current playback
-    stopPlayback();
-    
-    // Update both current time and seek time reference
-    seekTimeRef.current = time;
-    setCurrentTime(time);
-    
-    // If it was playing before, restart playback at new position
-    if (wasPlaying) {
-      console.log('Restarting playback at:', time);
+    return () => {
+      cancelled = true;
+      if (audio) {
+        for (const [event, handler] of listeners) audio.removeEventListener(event, handler);
+        audio.pause();
+        audio.removeAttribute('src');
+        audio.load();
+      }
+      if (audioRef.current === audio) audioRef.current = null;
+    };
+  }, [meetingId, reloadToken, patch]);
+
+  const play = useCallback(async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    try {
+      await audio.play();
+    } catch (err) {
+      console.error('Audio playback failed:', err);
+      patch({ isPlaying: false, error: 'Playback could not start' });
+    }
+  }, [patch]);
+
+  const pause = useCallback(() => {
+    audioRef.current?.pause();
+  }, []);
+
+  const toggle = useCallback(async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audio.paused) {
+      await play();
+    } else {
+      audio.pause();
+    }
+  }, [play]);
+
+  const seek = useCallback(async (seconds: number, options?: { play?: boolean }) => {
+    const audio = audioRef.current;
+    const shouldPlay = options?.play ?? false;
+    if (!audio || audio.readyState < HTMLMediaElement.HAVE_METADATA) {
+      // Metadata not loaded yet: apply once it is.
+      pendingSeekRef.current = { seconds, play: shouldPlay };
+      return;
+    }
+    const target = clampTime(seconds, audio.duration);
+    audio.currentTime = target;
+    patch({ currentTime: target });
+    if (shouldPlay && audio.paused) {
       await play();
     }
-  };
+  }, [patch, play]);
 
-  const pause = () => {
-    console.log('Pause requested');
-    stopPlayback();
-  };
+  const getCurrentTime = useCallback(() => audioRef.current?.currentTime ?? 0, []);
 
-  return {
-    isPlaying,
-    currentTime,
-    duration,
-    error,
-    play,
-    pause,
-    seek
-  };
-};
+  const reload = useCallback(() => {
+    setReloadToken((token) => token + 1);
+  }, []);
+
+  return { ...state, play, pause, toggle, seek, getCurrentTime, reload };
+}

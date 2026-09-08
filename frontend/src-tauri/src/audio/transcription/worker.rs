@@ -17,6 +17,81 @@ static SEQUENCE_COUNTER: AtomicU64 = AtomicU64::new(0);
 // Speech detection flag - reset per recording session
 static SPEECH_DETECTED_EMITTED: AtomicBool = AtomicBool::new(false);
 
+// ---------------------------------------------------------------------------
+// Live transcription progress (observable from the stop tail / frontend)
+// ---------------------------------------------------------------------------
+// The stop tail used to wait on the transcription JoinHandle blindly and
+// `get_transcription_status` returned zeros, so nobody could tell whether the
+// drain was progressing or wedged behind a busy engine. These counters are
+// reset at task start and read via `transcription_progress()`.
+static CHUNKS_QUEUED_TOTAL: AtomicU64 = AtomicU64::new(0);
+static CHUNKS_COMPLETED_TOTAL: AtomicU64 = AtomicU64::new(0);
+static CHUNKS_DROPPED_TOTAL: AtomicU64 = AtomicU64::new(0);
+/// Milliseconds since UNIX epoch of the last dispatch/completion (0 = none yet).
+static LAST_ACTIVITY_EPOCH_MS: AtomicU64 = AtomicU64::new(0);
+/// Set by the stop tail when the drain is abandoned: workers then drop queued
+/// chunks instead of transcribing them so the engine is released promptly.
+static ABANDON_PENDING: AtomicBool = AtomicBool::new(false);
+
+/// Snapshot of the live transcription queue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TranscriptionProgress {
+    pub chunks_queued: u64,
+    pub chunks_completed: u64,
+    pub chunks_dropped: u64,
+    /// Milliseconds since the last dispatch or completion (u64::MAX if none yet).
+    pub idle_ms: u64,
+}
+
+impl TranscriptionProgress {
+    pub fn pending(&self) -> u64 {
+        self.chunks_queued.saturating_sub(self.chunks_completed)
+    }
+}
+
+fn now_epoch_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn touch_activity() {
+    LAST_ACTIVITY_EPOCH_MS.store(now_epoch_ms(), Ordering::SeqCst);
+}
+
+fn reset_transcription_progress() {
+    CHUNKS_QUEUED_TOTAL.store(0, Ordering::SeqCst);
+    CHUNKS_COMPLETED_TOTAL.store(0, Ordering::SeqCst);
+    CHUNKS_DROPPED_TOTAL.store(0, Ordering::SeqCst);
+    ABANDON_PENDING.store(false, Ordering::SeqCst);
+    touch_activity();
+}
+
+/// Read the live transcription queue state.
+pub fn transcription_progress() -> TranscriptionProgress {
+    let last = LAST_ACTIVITY_EPOCH_MS.load(Ordering::SeqCst);
+    let idle_ms = if last == 0 {
+        u64::MAX
+    } else {
+        now_epoch_ms().saturating_sub(last)
+    };
+    TranscriptionProgress {
+        chunks_queued: CHUNKS_QUEUED_TOTAL.load(Ordering::SeqCst),
+        chunks_completed: CHUNKS_COMPLETED_TOTAL.load(Ordering::SeqCst),
+        chunks_dropped: CHUNKS_DROPPED_TOTAL.load(Ordering::SeqCst),
+        idle_ms,
+    }
+}
+
+/// Tell the workers to stop transcribing queued chunks (they are counted as
+/// dropped). Used by the stop tail when the drain stalls, e.g. because the
+/// engine is busy. The chunk currently inside the engine cannot be interrupted
+/// and will still finish.
+pub fn abandon_pending_transcription() {
+    ABANDON_PENDING.store(true, Ordering::SeqCst);
+}
+
 /// Reset the speech detected flag for a new recording session
 pub fn reset_speech_detected_flag() {
     SPEECH_DETECTED_EMITTED.store(false, Ordering::SeqCst);
@@ -54,6 +129,7 @@ pub fn start_transcription_task<R: Runtime>(
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         info!("🚀 Starting optimized parallel transcription task - guaranteeing zero chunk loss");
+        reset_transcription_progress();
 
         // Initialize transcription engine (Whisper or Parakeet based on config)
         let transcription_engine = match super::engine::get_or_init_transcription_engine(&app).await {
@@ -138,11 +214,25 @@ pub fn start_transcription_task<R: Runtime>(
                                 );
                             }
 
+                            // Stop tail gave up on the drain: release the engine quickly
+                            // by dropping (not transcribing) whatever is still queued.
+                            if ABANDON_PENDING.load(Ordering::SeqCst) {
+                                warn!("⚠️ Worker {}: drain abandoned, dropping chunk {}", worker_id, chunk.chunk_id);
+                                chunks_completed_clone.fetch_add(1, Ordering::SeqCst);
+                                CHUNKS_COMPLETED_TOTAL.fetch_add(1, Ordering::SeqCst);
+                                CHUNKS_DROPPED_TOTAL.fetch_add(1, Ordering::SeqCst);
+                                touch_activity();
+                                continue;
+                            }
+
                             // Check if model is still loaded before processing
                             if !engine_clone.is_model_loaded().await {
                                 warn!("⚠️ Worker {}: Model unloaded, but continuing to preserve chunk {}", worker_id, chunk.chunk_id);
                                 // Still count as completed even if we can't process
                                 chunks_completed_clone.fetch_add(1, Ordering::SeqCst);
+                                CHUNKS_COMPLETED_TOTAL.fetch_add(1, Ordering::SeqCst);
+                                CHUNKS_DROPPED_TOTAL.fetch_add(1, Ordering::SeqCst);
+                                touch_activity();
                                 continue;
                             }
 
@@ -233,11 +323,16 @@ pub fn start_transcription_task<R: Runtime>(
                                             // Skip silently, this is expected for very short chunks
                                             info!("Worker {}: {}", worker_id, e);
                                             chunks_completed_clone.fetch_add(1, Ordering::SeqCst);
+                                            CHUNKS_COMPLETED_TOTAL.fetch_add(1, Ordering::SeqCst);
+                                            touch_activity();
                                             continue;
                                         }
                                         TranscriptionError::ModelNotLoaded => {
                                             warn!("Worker {}: Model unloaded during transcription", worker_id);
                                             chunks_completed_clone.fetch_add(1, Ordering::SeqCst);
+                                            CHUNKS_COMPLETED_TOTAL.fetch_add(1, Ordering::SeqCst);
+                                            CHUNKS_DROPPED_TOTAL.fetch_add(1, Ordering::SeqCst);
+                                            touch_activity();
                                             continue;
                                         }
                                         _ => {
@@ -251,6 +346,8 @@ pub fn start_transcription_task<R: Runtime>(
                             // Mark chunk as completed
                             let completed =
                                 chunks_completed_clone.fetch_add(1, Ordering::SeqCst) + 1;
+                            CHUNKS_COMPLETED_TOTAL.fetch_add(1, Ordering::SeqCst);
+                            touch_activity();
                             let queued = chunks_queued_clone.load(Ordering::SeqCst);
 
                             // PERFORMANCE: Only log progress every 5th chunk to reduce I/O overhead
@@ -280,27 +377,26 @@ pub fn start_transcription_task<R: Runtime>(
                             }));
                         }
                         None => {
-                            // No more chunks available
-                            if input_finished_clone.load(Ordering::SeqCst) {
-                                // Double-check that all queued chunks are actually completed
-                                let final_queued = chunks_queued_clone.load(Ordering::SeqCst);
-                                let final_completed = chunks_completed_clone.load(Ordering::SeqCst);
-
-                                if final_completed >= final_queued {
-                                    info!(
-                                        "👷 Worker {} finishing - all {}/{} chunks processed",
-                                        worker_id, final_completed, final_queued
-                                    );
-                                    break;
-                                } else {
-                                    warn!("👷 Worker {} detected potential chunk loss: {}/{} completed, waiting...", worker_id, final_completed, final_queued);
-                                    // AGGRESSIVE POLLING: Reduced from 50ms to 5ms for faster chunk detection during shutdown
-                                    tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
-                                }
+                            // `recv()` only returns None once the sender is dropped AND every
+                            // chunk that was sent has been received, so the queue is fully
+                            // drained here. Break unconditionally: the old "wait for
+                            // input_finished" branch spun forever (1ms sleeps) when the
+                            // dispatcher was aborted by the stop tail before it could set the
+                            // flag, leaking a worker per abandoned recording.
+                            let final_queued = chunks_queued_clone.load(Ordering::SeqCst);
+                            let final_completed = chunks_completed_clone.load(Ordering::SeqCst);
+                            if !input_finished_clone.load(Ordering::SeqCst) {
+                                warn!(
+                                    "👷 Worker {} input channel closed before dispatcher finished ({}/{} chunks) - exiting",
+                                    worker_id, final_completed, final_queued
+                                );
                             } else {
-                                // AGGRESSIVE POLLING: Reduced from 10ms to 1ms for faster response during shutdown
-                                tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
+                                info!(
+                                    "👷 Worker {} finishing - all {}/{} chunks processed",
+                                    worker_id, final_completed, final_queued
+                                );
                             }
+                            break;
                         }
                     }
                 }
@@ -315,6 +411,8 @@ pub fn start_transcription_task<R: Runtime>(
         let mut receiver = transcription_receiver;
         while let Some(chunk) = receiver.recv().await {
             let queued = chunks_queued.fetch_add(1, Ordering::SeqCst) + 1;
+            CHUNKS_QUEUED_TOTAL.fetch_add(1, Ordering::SeqCst);
+            touch_activity();
             info!(
                 "📥 Dispatching chunk {} to workers (total queued: {})",
                 chunk.chunk_id, queued

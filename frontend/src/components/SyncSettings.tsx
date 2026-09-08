@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Switch } from './ui/switch';
+import { QrCode } from './QrCode';
 
 interface SyncConfig {
   enabled: boolean;
@@ -304,8 +305,8 @@ export function SyncSettings() {
         <div>
           <h3 className="text-lg font-semibold text-gray-900 mb-1">Pair your iPhone</h3>
           <p className="text-sm text-gray-600">
-            In the Minuteman iPhone app choose <em>Pair with PC</em> and paste the pairing string, or enter
-            the address and token by hand.
+            In the Minuteman iPhone app choose <em>Pair with PC</em> and scan the QR code, paste the
+            pairing string, or enter the address and token by hand.
           </p>
         </div>
 
@@ -314,8 +315,26 @@ export function SyncSettings() {
             <span className="text-sm font-medium text-gray-700">Pairing string</span>
             {pairingString && <CopyButton value={pairingString} label="Pairing string" />}
           </div>
-          <div className="px-3 py-2 rounded-md border border-gray-200 bg-gray-50 font-mono text-xs text-gray-800 break-all">
-            {pairingString ?? 'Select an address to build the pairing string.'}
+          <div className="flex flex-col gap-4 sm:flex-row">
+            {pairingString && (
+              <div
+                className="flex-shrink-0 self-start rounded-md border border-gray-200 bg-white p-2"
+                data-testid="pairing-qr"
+              >
+                <QrCode value={pairingString} size={168} label="Pairing QR code" />
+              </div>
+            )}
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="px-3 py-2 rounded-md border border-gray-200 bg-gray-50 font-mono text-xs text-gray-800 break-all">
+                {pairingString ?? 'Select an address to build the pairing string.'}
+              </div>
+              {pairingString && (
+                <p className="text-xs text-gray-500">
+                  Scan the QR code with the iPhone app (or the camera) to pair without typing. It contains the
+                  token, so only show it to people you trust.
+                </p>
+              )}
+            </div>
           </div>
         </div>
 

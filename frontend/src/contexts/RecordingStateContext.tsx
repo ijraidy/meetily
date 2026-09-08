@@ -89,15 +89,30 @@ export function RecordingStateProvider({ children }: { children: React.ReactNode
   const syncWithBackend = async () => {
     try {
       const backendState = await recordingService.getRecordingState();
+      // `is_stopping` is true for the whole Rust stop tail (IS_RECORDING stays
+      // true until the tail ends). After a webview reload mid-stop the UI would
+      // otherwise show a live recording with an enabled Stop button whose
+      // second stop_recording is refused as a duplicate.
+      const backendStopping = Boolean((backendState as { is_stopping?: boolean }).is_stopping);
 
-      setState(prev => ({
-        ...prev,
-        isRecording: backendState.is_recording,
-        isPaused: backendState.is_paused,
-        isActive: backendState.is_active,
-        recordingDuration: backendState.recording_duration,
-        activeDuration: backendState.active_duration,
-      }));
+      setState(prev => {
+        const inStopFlow = [
+          RecordingStatus.STOPPING,
+          RecordingStatus.PROCESSING_TRANSCRIPTS,
+          RecordingStatus.SAVING,
+        ].includes(prev.status);
+        const status = backendStopping && !inStopFlow ? RecordingStatus.STOPPING : prev.status;
+        return {
+          ...prev,
+          status,
+          statusMessage: status !== prev.status ? 'Stopping recording...' : prev.statusMessage,
+          isRecording: backendState.is_recording,
+          isPaused: backendState.is_paused,
+          isActive: backendState.is_active,
+          recordingDuration: backendState.recording_duration,
+          activeDuration: backendState.active_duration,
+        };
+      });
 
       console.log('[RecordingStateContext] Synced with backend:', backendState);
     } catch (error) {

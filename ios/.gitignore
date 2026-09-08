@@ -11,7 +11,5 @@ fastlane/*.p12
 fastlane/*.certSigningRequest
 *.ipa
 *.dSYM.zip
-# Placeholder icon is generated at build time by scripts/make_placeholder_icon.py
-Minuteman/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png
 .bundle/
 vendor/

@@ -21,6 +21,7 @@ import {
   SummaryLanguageStorage,
 } from '@/lib/summary-language-preferences';
 import { hasVisibleSummaryContent } from '@/lib/summary-content';
+import type { ExportKind } from '@/lib/export-formats';
 
 interface SummaryPanelProps {
   meeting: {
@@ -54,6 +55,8 @@ interface SummaryPanelProps {
   onTemplateSelect: (templateId: string, templateName: string) => void;
   isModelConfigLoading?: boolean;
   onOpenModelSettings?: (openFn: () => void) => void;
+  onExport?: (kind: ExportKind) => void | Promise<void>;
+  isExporting?: boolean;
 }
 
 export function SummaryPanel({
@@ -84,6 +87,8 @@ export function SummaryPanel({
   onTemplateSelect,
   isModelConfigLoading = false,
   onOpenModelSettings,
+  onExport,
+  isExporting = false,
 }: SummaryPanelProps) {
   const [summaryLang, setSummaryLang] = useState<string | null>(null);
   const [summaryLangStorage, setSummaryLangStorage] = useState<SummaryLanguageStorage>('metadata');
@@ -273,6 +278,9 @@ export function SummaryPanel({
                 isDirty={isSummaryDirty}
                 onSave={onSaveAll}
                 onCopy={onCopySummary}
+                onExport={onExport}
+                hasTranscript={transcripts.length > 0}
+                isExporting={isExporting}
               />
             </div>
           )}

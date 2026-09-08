@@ -4,12 +4,17 @@ import { Button } from '@/components/ui/button';
 import { ButtonGroup } from '@/components/ui/button-group';
 import { Copy, Save, Loader2 } from 'lucide-react';
 import Analytics from '@/lib/analytics';
+import { ExportMenu } from './ExportMenu';
+import type { ExportKind } from '@/lib/export-formats';
 
 interface SummaryUpdaterButtonGroupProps {
   isSaving: boolean;
   isDirty: boolean;
   onSave: () => Promise<void>;
   onCopy: () => Promise<void>;
+  onExport?: (kind: ExportKind) => void | Promise<void>;
+  hasTranscript?: boolean;
+  isExporting?: boolean;
 }
 
 export function SummaryUpdaterButtonGroup({
@@ -17,6 +22,9 @@ export function SummaryUpdaterButtonGroup({
   isDirty,
   onSave,
   onCopy,
+  onExport,
+  hasTranscript = false,
+  isExporting = false,
 }: SummaryUpdaterButtonGroupProps) {
   return (
     <ButtonGroup>
@@ -60,6 +68,16 @@ export function SummaryUpdaterButtonGroup({
         <span className="hidden @[40rem]:inline">Copy</span>
       </Button>
 
+      {/* Export menu (this group only renders when a summary exists) */}
+      {onExport && (
+        <ExportMenu
+          onExport={onExport}
+          hasSummary
+          hasTranscript={hasTranscript}
+          isExporting={isExporting}
+          labelClassName="hidden @[40rem]:inline"
+        />
+      )}
     </ButtonGroup>
   );
 }

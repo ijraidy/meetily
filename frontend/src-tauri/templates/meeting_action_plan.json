@@ -9,23 +9,24 @@
     },
     {
       "title": "Decisions",
-      "instruction": "List only decisions explicitly agreed during the meeting. Do not turn suggestions or unresolved questions into decisions.",
+      "instruction": "List each decision the group explicitly agreed on (for example a participant saying 'our decision today is ...' or 'we decided ...'), with the stated reason if one was given. If the Meeting Summary says the group decided or agreed something, that decision must be listed here. Suggestions that were not agreed, unresolved questions, and task assignments are not decisions",
       "format": "list"
     },
     {
-      "title": "To-Do List",
-      "instruction": "Extract each distinct committed task once as a Markdown checkbox. Use checked boxes only for tasks explicitly reported as completed. Include an owner, deadline, and transcript timestamp only if explicitly stated. Otherwise use Not specified for that field. Keep relative deadlines as spoken; never guess calendar dates. Keep unassigned tasks and mark their owner as Not specified. Do not invent tasks, names, dates, timestamps, or completion status.",
+      "title": "Task Checklist",
+      "instruction": "A checklist of every task mentioned in the meeting, finished or not, one Markdown checkbox per task, each line starting with a hyphen: - [x] for a finished task, - [ ] for an open task (never use * bullets). Rule 1: begin with tasks a participant reported as already done (for example 'Yes, I finished it and sent it yesterday'): write them as - [x] with that participant as Owner; a finished task must never be omitted. Rule 2: open tasks assigned to a named person are - [ ] with that person as Owner. Rule 3: open tasks that nobody was assigned to (for example 'someone needs to do this, we have not decided who') are - [ ] with Owner: Not specified; never move an unassigned task to Open Questions and Blockers. Rule 4: a suggestion or idea that the group did not agree to (a participant saying 'I suggest ...' or 'maybe we should ...' without agreement) is not a task; leave it out of this list and put it under Open Questions and Blockers instead. Blockers that someone is waiting on also belong under Open Questions and Blockers, not here. Fill Owner, Due, and Source only from what was explicitly said and write Not specified for any field that was not stated; Source is the [mm:ss] timestamp at the start of the transcript line in which the task was spoken. Keep relative deadlines exactly as spoken (for example: before Tuesday); never convert them to calendar dates. Do not invent tasks, names, dates, timestamps, or completion status",
       "format": "list",
-      "item_format": "- [ ] Task — Owner: name or Not specified; Due: deadline or Not specified; Source: timestamp or Not specified"
+      "item_format": "- [x] Completed task — Owner: name; Due: deadline or Not specified; Source: [mm:ss] or Not specified (checked box only for a task reported as done) OR - [ ] Open task — Owner: name or Not specified; Due: deadline or Not specified; Source: [mm:ss] or Not specified"
     },
     {
       "title": "Action Plan",
-      "instruction": "Organize only the agreed next steps into a numbered list. Include the intended deliverable, dependencies, priority, and follow-up checkpoint only when explicitly discussed. Preserve stated ordering; otherwise keep the meeting order without implying priority. Distinguish proposed steps from committed tasks and do not invent a strategy or schedule.",
-      "format": "list"
+      "instruction": "Write a numbered list of the agreed next steps: one step for each unchecked - [ ] task in the Task Checklist, in the same order, each stating the task and then the Owner and Due exactly as recorded in the Task Checklist. Do not repeat completed tasks and do not add steps that are not in the Task Checklist. Mention a dependency or blocker only if a participant stated it. Do not add Priority, Deliverable, or Follow-up checkpoint labels unless a participant explicitly discussed them; never assign a priority level yourself. Do not include suggestions that were not agreed, and do not invent a strategy or schedule",
+      "format": "list",
+      "item_format": "1. Task — Owner: name or Not specified; Due: deadline or Not specified"
     },
     {
       "title": "Open Questions and Blockers",
-      "instruction": "List unresolved questions, blockers, and pending approvals. Identify who will follow up only if stated. Do not invent answers or resolutions.",
+      "instruction": "List unresolved questions, blockers, pending approvals, and proposals that were raised but not agreed. Do not repeat tasks that are already in the Task Checklist: a task whose owner or deadline is unknown stays in the Task Checklist with Owner: Not specified and is not an open question. Name who will follow up only if stated. Do not invent answers or resolutions",
       "format": "list"
     }
   ]

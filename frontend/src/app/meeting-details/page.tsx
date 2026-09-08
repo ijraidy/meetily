@@ -92,8 +92,9 @@ function MeetingDetailsContent() {
         return;
       }
 
-      // DB is empty - check if gemma3:1b exists as fallback
-      const hasGemma = await checkForGemmaModel();
+      // DB is empty. Never auto-select an Ollama model here; the summary model is chosen
+      // in onboarding or Settings > Summary (built-in AI by default).
+      const hasGemma = false;
 
       if (hasGemma) {
         console.log('💾 DB empty, using gemma3:1b as initial default');

@@ -2,9 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
-import { Mic, ShieldCheck, Cpu, Languages, Wrench } from 'lucide-react';
+import { Mic, ShieldCheck, Cpu, Languages, Wrench, Github, Mail, Smartphone, Monitor } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
 
 const OWNER = 'Juraydi al-Mansouri';
+const OWNER_GITHUB = 'https://github.com/ijraidy';
+const OWNER_EMAIL = 'j@mansouri.uk';
+const RELEASES_URL = 'https://github.com/ijraidy/meetily/releases';
 
 const FEATURES = [
   {
@@ -25,7 +29,7 @@ const FEATURES = [
   {
     icon: Wrench,
     title: 'Built to be extended',
-    text: 'This is a personal tool. Templates, defaults, and features are customized here and can keep growing.',
+    text: 'Templates, defaults, and features are tailored here and keep growing on Windows and iPhone.',
   },
 ];
 
@@ -56,8 +60,8 @@ export default function About() {
         <h2 className="text-base font-semibold text-gray-800">About this app</h2>
         <p className="text-sm text-gray-600 leading-relaxed">
           Minuteman records meetings, transcribes them locally, and turns them into summaries, decisions,
-          and action plans with owners and deadlines. It is customized and maintained by {OWNER} for
-          personal use on Windows, with an iPhone companion in development.
+          and action plans with owners and deadlines. It is developed and maintained by {OWNER}, who also
+          created the Minuteman iPhone app that syncs with this desktop version.
         </p>
       </section>
 
@@ -71,6 +75,54 @@ export default function About() {
             <p className="text-sm text-gray-600 leading-relaxed">{text}</p>
           </div>
         ))}
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-base font-semibold text-gray-800">Developer</h2>
+        <p className="text-sm text-gray-600">{OWNER}</p>
+        <div className="flex flex-wrap gap-4 text-sm">
+          <button
+            type="button"
+            onClick={() => invoke('open_external_url', { url: OWNER_GITHUB }).catch(() => undefined)}
+            className="inline-flex items-center gap-1.5 text-blue-600 hover:underline"
+          >
+            <Github className="w-4 h-4" /> github.com/ijraidy
+          </button>
+          <button
+            type="button"
+            onClick={() => invoke('open_external_url', { url: `mailto:${OWNER_EMAIL}` }).catch(() => undefined)}
+            className="inline-flex items-center gap-1.5 text-blue-600 hover:underline"
+          >
+            <Mail className="w-4 h-4" /> {OWNER_EMAIL}
+          </button>
+        </div>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-base font-semibold text-gray-800">Get Minuteman</h2>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => invoke('open_external_url', { url: RELEASES_URL }).catch(() => undefined)}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 hover:bg-gray-50"
+          >
+            <Monitor className="w-4 h-4" /> Windows installer
+          </button>
+          <button
+            type="button"
+            onClick={() => invoke('open_external_url', { url: RELEASES_URL }).catch(() => undefined)}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 hover:bg-gray-50"
+          >
+            <Smartphone className="w-4 h-4" /> iPhone (TestFlight)
+          </button>
+          <span
+            className="inline-flex items-center gap-2 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-500"
+            title="Android version is planned"
+          >
+            <Smartphone className="w-4 h-4" /> Android: coming soon
+          </span>
+        </div>
+        <p className="text-xs text-gray-500">Downloads and TestFlight links are published on the GitHub releases page.</p>
       </section>
 
       <section className="space-y-2">

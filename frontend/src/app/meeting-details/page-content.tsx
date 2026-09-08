@@ -16,6 +16,8 @@ import { useMeetingData } from '@/hooks/meeting-details/useMeetingData';
 import { useSummaryGeneration } from '@/hooks/meeting-details/useSummaryGeneration';
 import { useTemplates } from '@/hooks/meeting-details/useTemplates';
 import { useCopyOperations } from '@/hooks/meeting-details/useCopyOperations';
+import { useExportOperations } from '@/hooks/meeting-details/useExportOperations';
+import { hasVisibleSummaryContent } from '@/lib/summary-content';
 import { useMeetingOperations } from '@/hooks/meeting-details/useMeetingOperations';
 import { useConfig } from '@/contexts/ConfigContext';
 
@@ -134,6 +136,13 @@ export default function PageContent({
     blockNoteSummaryRef: meetingData.blockNoteSummaryRef,
   });
 
+  const exportOperations = useExportOperations({
+    meeting,
+    meetingTitle: meetingData.meetingTitle,
+    aiSummary: meetingData.aiSummary,
+    blockNoteSummaryRef: meetingData.blockNoteSummaryRef,
+  });
+
   const meetingOperations = useMeetingOperations({
     meeting,
   });
@@ -213,6 +222,9 @@ export default function PageContent({
               meetingId={meeting.id}
               meetingFolderPath={meeting.folder_path}
               onRefetchTranscripts={onRefetchTranscripts}
+              onExport={exportOperations.handleExport}
+              hasSummary={hasVisibleSummaryContent(meetingData.aiSummary)}
+              isExporting={exportOperations.isExporting}
             />
           }
           summary={
@@ -244,6 +256,8 @@ export default function PageContent({
               onTemplateSelect={templates.handleTemplateSelection}
               isModelConfigLoading={isModelConfigLoading}
               onOpenModelSettings={handleRegisterModalOpen}
+              onExport={exportOperations.handleExport}
+              isExporting={exportOperations.isExporting}
             />
           }
         />

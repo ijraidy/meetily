@@ -213,7 +213,7 @@ fn translation_system_prompt(target_language: &str) -> String {
 4. Do not add commentary or explanation. Output ONLY the translated Markdown.
 5. If a technical term has no standard translation, keep the original English word.
 6. Preserve task checkbox markers `- [ ]` and `- [x]` and their completion state. Never invent owners, deadlines, priorities, or commitments during translation.
-7. For Arabic, use clear Modern Standard Arabic. Preserve proper names as supplied and do not translate technical identifiers."#
+7. For Arabic, use clear Modern Standard Arabic. Preserve proper names as supplied and do not translate technical identifiers. Translate the placeholder `Not specified` as `غير محدد` every time it appears, and keep `- [ ]` / `- [x]` at the start of each task line."#
     )
 }
 
@@ -243,7 +243,7 @@ fn build_final_report_system_prompt(
 5. If a section has no relevant info, write "None noted in this section."
 6. Output **only** the completed Markdown report.
 7. Do not include reasoning, thinking, self-correction, decision strategy, or any meta-commentary sections — output only the completed Markdown report.
-8. If unsure about something, omit it.
+8. If unsure whether something was actually said, omit it. A missing detail (such as an owner, deadline, or timestamp) is not a reason to drop an item; keep the item and mark the missing detail the way the section instructions say.
 
 **SECTION-SPECIFIC INSTRUCTIONS:**
 {section_instructions}
@@ -700,6 +700,21 @@ mod tests {
         assert!(prompt.to_lowercase().contains("no reasoning")
             || prompt.contains("meta-commentary")
             || prompt.contains("self-correction"));
+    }
+
+    #[test]
+    fn final_report_prompt_keeps_items_with_missing_details() {
+        let prompt = build_final_report_system_prompt("Fill", "# Title");
+        assert!(prompt.contains("not a reason to drop an item"));
+        assert!(prompt.contains("If unsure whether something was actually said, omit it"));
+    }
+
+    #[test]
+    fn translation_prompt_keeps_checkboxes_and_arabic_placeholder() {
+        let prompt = translation_system_prompt("Arabic");
+        assert!(prompt.contains("Preserve task checkbox markers `- [ ]` and `- [x]`"));
+        assert!(prompt.contains("`Not specified` as `غير محدد`"));
+        assert!(prompt.contains("Never invent owners, deadlines, priorities, or commitments"));
     }
 
     #[test]

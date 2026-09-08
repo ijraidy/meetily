@@ -172,6 +172,8 @@ pub async fn complete_onboarding<R: Runtime>(
     app: AppHandle<R>,
     state: tauri::State<'_, AppState>,
     model: String,
+    speech_model_ready: Option<bool>,
+    summary_model_ready: Option<bool>,
 ) -> Result<(), String> {
     info!("Completing onboarding with builtin-ai model: {}", model);
 
@@ -210,8 +212,11 @@ pub async fn complete_onboarding<R: Runtime>(
 
     status.completed = true;
     status.current_step = 4; // Max step (4 on macOS with permissions, 3 on other platforms)
-    status.model_status.parakeet = "downloaded".to_string();
-    status.model_status.summary = "downloaded".to_string();
+    // Record the readiness the frontend actually verified. Downloads may still be
+    // running in the background when the user continues, so never assume success.
+    let flag = |ready: Option<bool>| if ready.unwrap_or(false) { "downloaded" } else { "not_downloaded" };
+    status.model_status.parakeet = flag(speech_model_ready).to_string();
+    status.model_status.summary = flag(summary_model_ready).to_string();
     status.model_status.selected_summary_model = Some(model.clone());
 
     save_onboarding_status(&app, &status)

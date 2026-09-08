@@ -24,6 +24,44 @@ interface TranscriptConfig {
 }
 
 /**
+ * Audio import and retranscription share the live recording's Whisper/Parakeet
+ * engine, so the backend refuses `start_recording` while either is running
+ * (`batch_job_blocking_start` in audio/recording_commands.rs). Ask first so the
+ * user gets a clear toast instead of a generic "Recording Failed" dialog.
+ * Returns the reason to show, or null when recording may start.
+ */
+async function getBatchJobBlockingStart(): Promise<string | null> {
+  try {
+    const [importRunning, retranscribeRunning] = await Promise.all([
+      invoke<boolean>('is_import_in_progress_command'),
+      invoke<boolean>('is_retranscription_in_progress_command'),
+    ]);
+    if (importRunning) {
+      return 'An audio import is still running. Wait for it to finish (or cancel it) before recording.';
+    }
+    if (retranscribeRunning) {
+      return 'A retranscription is still running. Wait for it to finish (or cancel it) before recording.';
+    }
+  } catch (error) {
+    // The backend start command re-checks and refuses with the same message.
+    console.warn('Could not query import/retranscription state before recording:', error);
+  }
+  return null;
+}
+
+/** The backend refused the start because an import/retranscription holds the engine. */
+function isEngineBusyError(errorMsg: string): boolean {
+  return errorMsg.includes('Cannot start recording while');
+}
+
+function showEngineBusyToast(reason: string) {
+  toast.info('Speech engine is busy', {
+    description: reason,
+    duration: 6000,
+  });
+}
+
+/**
  * Custom hook for managing recording start lifecycle.
  * Handles both manual start (button click) and auto-start (from sidebar navigation).
  *
@@ -141,6 +179,16 @@ export function useRecordingStart(
         return;
       }
 
+      // Refuse to share the engine with a running import / retranscription.
+      const busyReason = await getBatchJobBlockingStart();
+      if (busyReason) {
+        console.warn('handleRecordingStart blocked:', busyReason);
+        showEngineBusyToast(busyReason);
+        Analytics.trackButtonClick('start_recording_blocked_engine_busy', 'home_page');
+        setStatus(RecordingStatus.IDLE);
+        return;
+      }
+
       console.log('Selected transcription model ready - setting up meeting title and state');
 
       const randomTitle = generateMeetingTitle();
@@ -180,6 +228,17 @@ export function useRecordingStart(
         console.warn('Start rejected because recording is already active - leaving live recording state untouched');
         setStatus(RecordingStatus.RECORDING);
         Analytics.trackButtonClick('start_recording_error', 'home_page');
+        return;
+      }
+
+      // Lost the race with an import/retranscription that started after our
+      // pre-check: a clear toast, back to IDLE, and no error dialog.
+      if (isEngineBusyError(errorMsg)) {
+        console.warn('Start refused by backend - engine busy:', errorMsg);
+        showEngineBusyToast(errorMsg);
+        setStatus(RecordingStatus.IDLE);
+        setIsRecording(false);
+        Analytics.trackButtonClick('start_recording_blocked_engine_busy', 'home_page');
         return;
       }
 
@@ -230,6 +289,16 @@ export function useRecordingStart(
             return;
           }
 
+          const busyReason = await getBatchJobBlockingStart();
+          if (busyReason) {
+            console.warn('Auto-start blocked:', busyReason);
+            showEngineBusyToast(busyReason);
+            Analytics.trackButtonClick('start_recording_blocked_engine_busy', 'sidebar_auto');
+            setStatus(RecordingStatus.IDLE);
+            setIsAutoStarting(false);
+            return;
+          }
+
           // Start the actual backend recording
           try {
             // Generate meeting title
@@ -259,7 +328,11 @@ export function useRecordingStart(
           } catch (error) {
             console.error('Failed to auto-start recording:', error);
             const errorMsg = error instanceof Error ? error.message : String(error);
-            if (errorMsg.includes('already in progress')) {
+            if (isEngineBusyError(errorMsg)) {
+              showEngineBusyToast(errorMsg);
+              setStatus(RecordingStatus.IDLE);
+              Analytics.trackButtonClick('start_recording_blocked_engine_busy', 'sidebar_auto');
+            } else if (errorMsg.includes('already in progress')) {
               // Benign race — another start won and is live; skip ERROR/alert.
               setStatus(RecordingStatus.RECORDING);
               Analytics.trackButtonClick('start_recording_error', 'sidebar_auto');
@@ -325,6 +398,16 @@ export function useRecordingStart(
         return;
       }
 
+      const busyReason = await getBatchJobBlockingStart();
+      if (busyReason) {
+        console.warn('Direct start blocked:', busyReason);
+        showEngineBusyToast(busyReason);
+        Analytics.trackButtonClick('start_recording_blocked_engine_busy', 'sidebar_direct');
+        setStatus(RecordingStatus.IDLE);
+        setIsAutoStarting(false);
+        return;
+      }
+
       try {
         // Generate meeting title
         const generatedMeetingTitle = generateMeetingTitle();
@@ -353,7 +436,11 @@ export function useRecordingStart(
       } catch (error) {
         console.error('Failed to start recording from sidebar:', error);
         const errorMsg = error instanceof Error ? error.message : String(error);
-        if (errorMsg.includes('already in progress')) {
+        if (isEngineBusyError(errorMsg)) {
+          showEngineBusyToast(errorMsg);
+          setStatus(RecordingStatus.IDLE);
+          Analytics.trackButtonClick('start_recording_blocked_engine_busy', 'sidebar_direct');
+        } else if (errorMsg.includes('already in progress')) {
           // Benign race — another start won and is live; skip ERROR/alert.
           setStatus(RecordingStatus.RECORDING);
           Analytics.trackButtonClick('start_recording_error', 'sidebar_direct');

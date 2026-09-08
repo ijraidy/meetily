@@ -10,8 +10,10 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
 };
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::task::JoinHandle;
+use uuid::Uuid;
 
 use super::{
     parse_audio_device,
@@ -24,6 +26,7 @@ use super::device_monitor::{DeviceEvent, DeviceMonitorType};
 // Import transcription modules
 use super::transcription::{
     self,
+    drain::{describe_drain, evaluate_drain, DrainDecision, DrainObservation, DrainPolicy},
     reset_speech_detected_flag,
 };
 
@@ -77,11 +80,20 @@ fn session_live(s: &Arc<super::RecordingState>) -> bool {
 /// and the stuck-flag failure mode returns — add a start-time reset then.
 struct StoppingGuard;
 impl StoppingGuard {
-    fn new() -> Self {
-        IS_RECORDING_STOPPING.store(true, Ordering::SeqCst);
-        StoppingGuard
+    /// Claim the stop tail. Returns `None` if a tail is already running so a
+    /// second concurrent stop (tray + UI button, double-click, shortcut) is
+    /// refused instead of running an empty tail against a taken manager.
+    fn try_new() -> Option<Self> {
+        IS_RECORDING_STOPPING
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .ok()
+            .map(|_| StoppingGuard)
     }
 }
+
+/// Error returned to a second `stop_recording` caller while the tail runs.
+/// The frontend matches on this text to ignore the duplicate.
+pub const STOP_ALREADY_IN_PROGRESS: &str = "Recording stop already in progress";
 impl Drop for StoppingGuard {
     fn drop(&mut self) {
         IS_RECORDING_STOPPING.store(false, Ordering::SeqCst);
@@ -93,6 +105,11 @@ impl Drop for StoppingGuard {
 /// the mic-recovery budget already exhausted).
 fn finalize_recording_start() {
     info!("🔍 Setting IS_RECORDING to true and resetting SPEECH_DETECTED_EMITTED");
+    let session_id = Uuid::new_v4().to_string();
+    info!("🔍 Recording session id: {}", session_id);
+    *RECORDING_SESSION_ID
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = Some(session_id);
     IS_RECORDING.store(true, Ordering::SeqCst);
     MIC_FALLBACK_FAILED_ATTEMPTS.store(0, Ordering::SeqCst); // fresh mic-recovery budget per session
     reset_speech_detected_flag(); // reset speech-detected emit latch for the new session
@@ -104,6 +121,46 @@ static TRANSCRIPTION_TASK: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
 
 // Listener ID for proper cleanup - prevents microphone from staying active after recording stops
 static TRANSCRIPT_LISTENER_ID: Mutex<Option<tauri::EventId>> = Mutex::new(None);
+
+/// Per-recording session id. Generated at start and carried in
+/// `recording-started`, `recording-stopped` and `get_recording_state` so the
+/// frontend can key its one-and-only-one meeting save on it rather than on a
+/// folder path that may be missing (auto-save off) or on sessionStorage that a
+/// concurrent save pass already cleared.
+static RECORDING_SESSION_ID: Mutex<Option<String>> = Mutex::new(None);
+
+/// Session id of the current (or most recently stopped) recording.
+pub fn current_session_id() -> Option<String> {
+    RECORDING_SESSION_ID
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+}
+
+/// A batch transcription job (audio import / retranscription) shares the global
+/// Whisper/Parakeet engine with live recording. Running both at once is unsafe
+/// with the current engine model: each side (re)loads or unloads the model out
+/// from under the other (`transcription/engine.rs::get_or_init_whisper` unloads a
+/// mismatching model; the stop tail unloads after the drain), and the live drain
+/// starves behind the batch job's long segments - the exact "stop stalls for
+/// minutes" report. Refuse to start with a clear message instead.
+pub(crate) fn batch_job_blocking_start() -> Option<String> {
+    if super::import::is_import_in_progress() {
+        return Some(
+            "Cannot start recording while an audio import is in progress. \
+             Wait for the import to finish (or cancel it) and try again."
+                .to_string(),
+        );
+    }
+    if super::retranscription::is_retranscription_in_progress() {
+        return Some(
+            "Cannot start recording while a retranscription is in progress. \
+             Wait for it to finish (or cancel it) and try again."
+                .to_string(),
+        );
+    }
+    None
+}
 
 // ============================================================================
 // PUBLIC TYPES
@@ -265,6 +322,13 @@ pub async fn start_recording_with_meeting_name<R: Runtime>(
         return Err("Recording already in progress".to_string());
     }
 
+    // Refuse to share the engine with a running import / retranscription.
+    if let Some(reason) = batch_job_blocking_start() {
+        warn!("🚫 Recording start refused: {}", reason);
+        let _ = app.emit("recording-error", reason.clone());
+        return Err(reason);
+    }
+
     // Validate that transcription models are available before starting recording
     info!("🔍 Validating transcription model availability before starting recording...");
     if let Err(validation_error) = transcription::validate_transcription_model_ready(&app).await {
@@ -399,7 +463,8 @@ pub async fn start_recording_with_meeting_name<R: Runtime>(
     app.emit("recording-started", serde_json::json!({
         "message": "Recording started successfully with parallel processing",
         "devices": ["Default Microphone", "Default System Audio"],
-        "workers": 3
+        "workers": 3,
+        "session_id": current_session_id()
     })).map_err(|e| e.to_string())?;
 
     // Update tray menu to reflect recording state
@@ -438,6 +503,13 @@ pub async fn start_recording_with_devices_and_meeting<R: Runtime>(
     info!("🔍 IS_RECORDING state check: {}", current_recording_state);
     if current_recording_state {
         return Err("Recording already in progress".to_string());
+    }
+
+    // Refuse to share the engine with a running import / retranscription.
+    if let Some(reason) = batch_job_blocking_start() {
+        warn!("🚫 Recording start refused: {}", reason);
+        let _ = app.emit("recording-error", reason.clone());
+        return Err(reason);
     }
 
     // Validate that transcription models are available before starting recording
@@ -574,7 +646,8 @@ pub async fn start_recording_with_devices_and_meeting<R: Runtime>(
             mic_device_name.unwrap_or_else(|| "Default Microphone".to_string()),
             system_device_name.unwrap_or_else(|| "Default System Audio".to_string())
         ],
-        "workers": 3
+        "workers": 3,
+        "session_id": current_session_id()
     })).map_err(|e| e.to_string())?;
 
     // Update tray menu to reflect recording state
@@ -600,6 +673,20 @@ pub async fn stop_recording<R: Runtime>(
         return Ok(());
     }
 
+    // Re-entrancy guard. A second stop (tray / shortcut / double-click) while the
+    // tail was running used to find RECORDING_MANAGER already taken, run an
+    // empty tail, flip IS_RECORDING false underneath the first tail and emit a
+    // second `recording-stopped` with `folder_path: null` - which the frontend
+    // turned into a second meeting row. Refuse the duplicate instead. RAII so a
+    // panic in the tail can't leave the flag stuck true.
+    let _stopping_guard = match StoppingGuard::try_new() {
+        Some(guard) => guard,
+        None => {
+            warn!("stop_recording called while a stop tail is already running - ignoring duplicate");
+            return Err(STOP_ALREADY_IN_PROGRESS.to_string());
+        }
+    };
+
     // Emit shutdown progress to frontend
     let _ = app.emit(
         "recording-shutdown-progress",
@@ -616,12 +703,10 @@ pub async fn stop_recording<R: Runtime>(
         global_manager.take()
     };
 
-    // Mark the stop tail as in progress so a mic-disconnect fallback that was
-    // queued before Stop short-circuits instead of retrying against the taken
-    // manager. IS_RECORDING itself stays true until the tail completes — the
-    // frontend polls it to keep the stop UI up. RAII so a panic in the tail
-    // below can't leave the flag stuck true.
-    let _stopping_guard = StoppingGuard::new();
+    // IS_RECORDING_STOPPING (set by the guard above) also makes a mic-disconnect
+    // fallback that was queued before Stop short-circuit instead of retrying
+    // against the taken manager. IS_RECORDING itself stays true until the tail
+    // completes — the frontend polls it to keep the stop UI up.
 
     let stop_result = if let Some(mut manager) = manager_for_cleanup {
         // Use FORCE FLUSH to immediately process all accumulated audio - eliminates 30s delay!
@@ -667,61 +752,50 @@ pub async fn stop_recording<R: Runtime>(
         }),
     );
 
-    // Wait for transcription task with enhanced progress monitoring (NO TIMEOUT - we must process all chunks)
+    // Wait for the transcription workers to drain the queue. Bounded and
+    // observable: progress events carry chunk counts, and if the queue stops
+    // moving (engine busy/contended) we abandon the rest instead of hanging.
     let transcription_task = {
         let mut global_task = TRANSCRIPTION_TASK.lock().unwrap();
         global_task.take()
     };
 
-    if let Some(task_handle) = transcription_task {
-        info!("⏳ Waiting for ALL transcription chunks to be processed (no timeout - preserving every chunk)");
-
-        // Enhanced progress monitoring during shutdown
-        let progress_app = app.clone();
-        let progress_task = tokio::spawn(async move {
-            let last_update = std::time::Instant::now();
-
-            loop {
-                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-                // Emit periodic progress updates during shutdown
-                let elapsed = last_update.elapsed().as_secs();
-                let _ = progress_app.emit(
-                    "recording-shutdown-progress",
-                    serde_json::json!({
-                        "stage": "processing_transcripts",
-                        "message": format!("Processing transcripts... ({}s elapsed)", elapsed),
-                        "progress": 40,
-                        "detailed": true,
-                        "elapsed_seconds": elapsed
-                    }),
-                );
-            }
-        });
-
-        // Wait up to 10 minutes for transcription completion to prevent indefinite hangs
-        match tokio::time::timeout(
-            tokio::time::Duration::from_secs(600), // 10 minutes max
-            task_handle
-        ).await {
-            Ok(Ok(())) => {
-                info!("✅ ALL transcription chunks processed successfully - no data lost");
-            }
-            Ok(Err(e)) => {
-                warn!("⚠️ Transcription task completed with error: {:?}", e);
-                // Continue anyway - the worker may have processed most chunks
-            }
-            Err(_) => {
-                warn!("⏱️ Transcription timeout (10 minutes) reached, continuing shutdown to prevent indefinite hang");
-                // Continue shutdown even on timeout - better to lose some chunks than hang forever
-            }
-        }
-
-        // Stop progress monitoring
-        progress_task.abort();
+    let drain = drain_transcription_queue(&app, transcription_task).await;
+    if drain.incomplete {
+        warn!(
+            "⚠️ Transcription incomplete ({}): {} of {} chunks transcribed, {} dropped",
+            drain.reason(),
+            drain.chunks_transcribed(),
+            drain.chunks_queued,
+            drain.chunks_dropped
+        );
+        let _ = app.emit(
+            "transcription-incomplete",
+            serde_json::json!({
+                "reason": drain.reason(),
+                "chunks_queued": drain.chunks_queued,
+                "chunks_transcribed": drain.chunks_transcribed(),
+                "chunks_dropped": drain.chunks_dropped,
+                "message": format!(
+                    "{} audio chunk(s) could not be transcribed before the stop deadline ({}).",
+                    drain.chunks_dropped, drain.reason()
+                )
+            }),
+        );
     } else {
-        info!("ℹ️ No transcription task found to wait for");
+        info!("✅ ALL {} transcription chunks processed - no data lost", drain.chunks_queued);
     }
+    // The frontend has always listened for this event (transcriptService); it was never emitted.
+    let _ = app.emit(
+        "transcription-complete",
+        serde_json::json!({
+            "complete": !drain.incomplete,
+            "reason": drain.reason(),
+            "chunks_queued": drain.chunks_queued,
+            "chunks_transcribed": drain.chunks_transcribed(),
+            "chunks_dropped": drain.chunks_dropped
+        }),
+    );
 
     // Step 3: Now safely unload Whisper model after ALL chunks are processed
     let _ = app.emit(
@@ -758,7 +832,17 @@ pub async fn stop_recording<R: Runtime>(
         }
     };
 
+    // A running import/retranscription is using the engine - do not pull the
+    // model out from under it (it would fail its next segment with "No model
+    // loaded"). `unload_engine_after_batch` already does the mirror check.
+    let batch_job_active = super::import::is_import_in_progress()
+        || super::retranscription::is_retranscription_in_progress();
+    if batch_job_active {
+        warn!("🧠 Skipping model unload: a batch transcription job (import/retranscription) is using the engine");
+    }
+
     match config.as_deref() {
+        _ if batch_job_active => {}
         Some("parakeet") => {
             info!("🦜 Unloading Parakeet model...");
             let engine_clone = {
@@ -775,10 +859,13 @@ pub async fn stop_recording<R: Runtime>(
                     .unwrap_or_else(|| "unknown".to_string());
                 info!("Current Parakeet model before unload: '{}'", current_model);
 
-                if engine.unload_model().await {
-                    info!("✅ Parakeet model '{}' unloaded successfully", current_model);
-                } else {
-                    warn!("⚠️ Failed to unload Parakeet model '{}'", current_model);
+                match tokio::time::timeout(MODEL_UNLOAD_TIMEOUT, engine.unload_model()).await {
+                    Ok(true) => info!("✅ Parakeet model '{}' unloaded successfully", current_model),
+                    Ok(false) => warn!("⚠️ Failed to unload Parakeet model '{}'", current_model),
+                    Err(_) => warn!(
+                        "⏱️ Parakeet model unload timed out after {:?} (engine busy) - continuing shutdown",
+                        MODEL_UNLOAD_TIMEOUT
+                    ),
                 }
             } else {
                 warn!("⚠️ No Parakeet engine found to unload model");
@@ -801,10 +888,13 @@ pub async fn stop_recording<R: Runtime>(
                     .unwrap_or_else(|| "unknown".to_string());
                 info!("Current Whisper model before unload: '{}'", current_model);
 
-                if engine.unload_model().await {
-                    info!("✅ Whisper model '{}' unloaded successfully", current_model);
-                } else {
-                    warn!("⚠️ Failed to unload Whisper model '{}'", current_model);
+                match tokio::time::timeout(MODEL_UNLOAD_TIMEOUT, engine.unload_model()).await {
+                    Ok(true) => info!("✅ Whisper model '{}' unloaded successfully", current_model),
+                    Ok(false) => warn!("⚠️ Failed to unload Whisper model '{}'", current_model),
+                    Err(_) => warn!(
+                        "⏱️ Whisper model unload timed out after {:?} (engine busy) - continuing shutdown",
+                        MODEL_UNLOAD_TIMEOUT
+                    ),
                 }
             } else {
                 warn!("⚠️ No Whisper engine found to unload model");
@@ -967,17 +1057,19 @@ pub async fn stop_recording<R: Runtime>(
     // Step 4.5: Prepare metadata for frontend (NO database save)
     // NOTE: We do NOT save to database here. The frontend will save after all transcripts are displayed.
     // This ensures the user sees all transcripts streaming in before the database save happens.
-    let (folder_path_str, meeting_name_str) = match (&meeting_folder, &meeting_name) {
-        (Some(path), Some(name)) => (
-            Some(path.to_string_lossy().to_string()),
-            Some(name.clone()),
-        ),
-        _ => (None, None),
-    };
+    // meeting_name is independent of the folder: with auto-save off there is
+    // no folder, but the frontend still needs the backend's title for the save.
+    let folder_path_str = meeting_folder
+        .as_ref()
+        .map(|path| path.to_string_lossy().to_string());
+    let meeting_name_str = meeting_name.clone();
+    let session_id = current_session_id();
 
     info!("📤 Preparing recording metadata for frontend save");
+    info!("   session_id: {:?}", session_id);
     info!("   folder_path: {:?}", folder_path_str);
     info!("   meeting_name: {:?}", meeting_name_str);
+    info!("   transcription_incomplete: {}", drain.incomplete);
 
     // Database save removed - frontend will handle this after receiving all transcripts
     info!("ℹ️ Skipping database save in Rust - frontend will save after all transcripts received");
@@ -997,8 +1089,14 @@ pub async fn stop_recording<R: Runtime>(
         "recording-stopped",
         serde_json::json!({
             "message": "Recording stopped - frontend will save after all transcripts received",
+            "session_id": session_id,
             "folder_path": folder_path_str,
-            "meeting_name": meeting_name_str
+            "meeting_name": meeting_name_str,
+            "transcription_incomplete": drain.incomplete,
+            "transcription_reason": drain.reason(),
+            "chunks_queued": drain.chunks_queued,
+            "chunks_transcribed": drain.chunks_transcribed(),
+            "chunks_dropped": drain.chunks_dropped
         }),
     )
     .map_err(|e| e.to_string())?;
@@ -1006,8 +1104,160 @@ pub async fn stop_recording<R: Runtime>(
     // Update tray menu to reflect stopped state
     crate::tray::update_tray_menu(&app);
 
-    info!("🎉 Recording stopped successfully with ZERO transcript chunks lost");
+    if drain.incomplete {
+        info!("🎉 Recording stopped; transcription incomplete ({} chunk(s) dropped)", drain.chunks_dropped);
+    } else {
+        info!("🎉 Recording stopped successfully with ZERO transcript chunks lost");
+    }
     Ok(())
+}
+
+/// Upper bound for `unload_model` during the stop tail: it needs the engine's
+/// write lock, which a chunk still inside the engine (or an abandoned worker
+/// finishing its last segment) can hold for a while.
+const MODEL_UNLOAD_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Result of draining the live transcription queue during the stop tail.
+struct DrainOutcome {
+    decision: DrainDecision,
+    chunks_queued: u64,
+    chunks_completed: u64,
+    chunks_dropped: u64,
+    /// True when at least one chunk was not transcribed.
+    incomplete: bool,
+}
+
+impl DrainOutcome {
+    fn reason(&self) -> &'static str {
+        match self.decision {
+            DrainDecision::Complete => "complete",
+            DrainDecision::Stalled => "stalled",
+            DrainDecision::HardCapReached => "hard_cap",
+            DrainDecision::KeepWaiting => "unknown",
+        }
+    }
+
+    fn chunks_transcribed(&self) -> u64 {
+        self.chunks_completed.saturating_sub(self.chunks_dropped)
+    }
+}
+
+/// Wait for the transcription task to drain its queue, emitting
+/// `recording-shutdown-progress` every 500ms with real chunk counts. If the
+/// queue stops moving for `DrainPolicy::stall_timeout` (engine busy / contended)
+/// or the hard cap elapses, tell the workers to drop what is left, abort the
+/// task and report the loss so the caller can still finalize the audio file
+/// and the meeting instead of hanging.
+async fn drain_transcription_queue<R: Runtime>(
+    app: &AppHandle<R>,
+    task: Option<JoinHandle<()>>,
+) -> DrainOutcome {
+    // Import / retranscription hold the same engine; if one is running the
+    // queue will not move, so use the short-fuse policy.
+    let engine_contended = super::import::is_import_in_progress()
+        || super::retranscription::is_retranscription_in_progress();
+    let policy = if engine_contended {
+        warn!("⚠️ A batch transcription job is using the engine - draining with the contended policy");
+        DrainPolicy::contended()
+    } else {
+        DrainPolicy::default_live()
+    };
+    let mut task = match task {
+        Some(task) => task,
+        None => {
+            info!("ℹ️ No transcription task found to wait for");
+            let progress = transcription::transcription_progress();
+            return DrainOutcome {
+                decision: DrainDecision::Complete,
+                chunks_queued: progress.chunks_queued,
+                chunks_completed: progress.chunks_completed,
+                chunks_dropped: progress.chunks_dropped,
+                incomplete: false,
+            };
+        }
+    };
+
+    info!(
+        "⏳ Draining transcription queue (stall timeout {:?}, hard cap {:?})",
+        policy.stall_timeout, policy.hard_cap
+    );
+
+    let started = Instant::now();
+    let decision = loop {
+        let progress = transcription::transcription_progress();
+        let obs = DrainObservation {
+            elapsed: started.elapsed(),
+            since_last_activity: Duration::from_millis(progress.idle_ms),
+            chunks_queued: progress.chunks_queued,
+            chunks_completed: progress.chunks_completed,
+            task_finished: task.is_finished(),
+        };
+        let decision = evaluate_drain(&obs, &policy);
+
+        // 40%..65% of the shutdown bar is the drain.
+        let fraction = if obs.chunks_queued == 0 {
+            1.0
+        } else {
+            obs.chunks_completed as f64 / obs.chunks_queued as f64
+        };
+        let _ = app.emit(
+            "recording-shutdown-progress",
+            serde_json::json!({
+                "stage": "processing_transcripts",
+                "message": describe_drain(&obs),
+                "progress": 40 + (fraction * 25.0) as u32,
+                "detailed": true,
+                "elapsed_seconds": obs.elapsed.as_secs(),
+                "chunks_queued": obs.chunks_queued,
+                "chunks_completed": obs.chunks_completed,
+                "chunks_pending": obs.chunks_queued.saturating_sub(obs.chunks_completed),
+                "idle_seconds": progress.idle_ms.min(u64::MAX / 2) / 1000
+            }),
+        );
+
+        match decision {
+            DrainDecision::KeepWaiting => tokio::time::sleep(Duration::from_millis(500)).await,
+            other => break other,
+        }
+    };
+
+    match decision {
+        DrainDecision::Complete => {
+            // Queue is empty; the task should exit as soon as the pipeline drops
+            // its sender. Bound it anyway so a leaked sender can't hang the tail.
+            match tokio::time::timeout(Duration::from_secs(15), &mut task).await {
+                Ok(Ok(())) => info!("✅ Transcription task finished cleanly"),
+                Ok(Err(e)) => warn!("⚠️ Transcription task completed with error: {:?}", e),
+                Err(_) => {
+                    warn!("⏱️ Transcription task did not exit after the queue drained - aborting it");
+                    task.abort();
+                }
+            }
+        }
+        DrainDecision::Stalled | DrainDecision::HardCapReached => {
+            warn!(
+                "⏱️ Transcription drain abandoned ({:?}) after {:?} - the engine is busy; finalizing without the remaining chunks",
+                decision,
+                started.elapsed()
+            );
+            transcription::abandon_pending_transcription();
+            task.abort();
+            let _ = tokio::time::timeout(Duration::from_secs(5), &mut task).await;
+        }
+        DrainDecision::KeepWaiting => unreachable!("loop only breaks on a terminal decision"),
+    }
+
+    let progress = transcription::transcription_progress();
+    // Chunks the workers never reached count as dropped too.
+    let never_reached = progress.pending();
+    let chunks_dropped = progress.chunks_dropped + never_reached;
+    DrainOutcome {
+        decision,
+        chunks_queued: progress.chunks_queued,
+        chunks_completed: progress.chunks_completed,
+        chunks_dropped,
+        incomplete: decision.is_abandoned() || chunks_dropped > 0,
+    }
 }
 
 /// Check if recording is active
@@ -1017,10 +1267,21 @@ pub async fn is_recording() -> bool {
 
 /// Get recording statistics
 pub async fn get_transcription_status() -> TranscriptionStatus {
+    // Real queue numbers (this used to be a stub returning zeros, which made the
+    // frontend's "no activity for 8s" heuristic meaningless).
+    let progress = transcription::transcription_progress();
+    // Once the stop tail has finished (IS_RECORDING false) the queue is dead:
+    // an abandoned drain leaves never-reached chunks in the counters, and they
+    // must not read as "still pending" to the frontend's post-stop wait.
+    let pending = if IS_RECORDING.load(Ordering::SeqCst) {
+        progress.pending() as usize
+    } else {
+        0
+    };
     TranscriptionStatus {
-        chunks_in_queue: 0,
-        is_processing: IS_RECORDING.load(Ordering::SeqCst),
-        last_activity_ms: 0,
+        chunks_in_queue: pending,
+        is_processing: pending > 0,
+        last_activity_ms: if progress.idle_ms == u64::MAX { 0 } else { progress.idle_ms },
     }
 }
 
@@ -1107,11 +1368,15 @@ pub async fn is_recording_paused() -> bool {
 #[tauri::command]
 pub async fn get_recording_state() -> serde_json::Value {
     let is_recording = IS_RECORDING.load(Ordering::SeqCst);
+    let is_stopping = IS_RECORDING_STOPPING.load(Ordering::SeqCst);
+    let session_id = current_session_id();
     let manager_guard = RECORDING_MANAGER.lock().unwrap();
 
     if let Some(manager) = manager_guard.as_ref() {
         serde_json::json!({
             "is_recording": is_recording,
+            "is_stopping": is_stopping,
+            "session_id": session_id,
             "is_paused": manager.is_paused(),
             "is_active": manager.is_active(),
             "recording_duration": manager.get_recording_duration(),
@@ -1122,6 +1387,8 @@ pub async fn get_recording_state() -> serde_json::Value {
     } else {
         serde_json::json!({
             "is_recording": is_recording,
+            "is_stopping": is_stopping,
+            "session_id": session_id,
             "is_paused": false,
             "is_active": false,
             "recording_duration": null,

@@ -1,10 +1,12 @@
 "use client";
 
 import { Transcript, TranscriptSegmentData } from '@/types';
-import { TranscriptView } from '@/components/TranscriptView';
 import { VirtualizedTranscriptView } from '@/components/VirtualizedTranscriptView';
+import { AudioPlayer } from '@/components/AudioPlayer';
+import { useAudioPlayer } from '@/hooks/useAudioPlayer';
+import type { ExportKind } from '@/lib/export-formats';
 import { TranscriptButtonGroup } from './TranscriptButtonGroup';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 
 interface TranscriptPanelProps {
   transcripts: Transcript[];
@@ -28,6 +30,31 @@ interface TranscriptPanelProps {
   meetingId?: string;
   meetingFolderPath?: string | null;
   onRefetchTranscripts?: () => Promise<void>;
+
+  // Export props
+  onExport?: (kind: ExportKind) => void | Promise<void>;
+  hasSummary?: boolean;
+  isExporting?: boolean;
+}
+
+/**
+ * Index of the segment that contains `time` (the last segment whose start is
+ * at or before it). Segments are sorted by start time, so binary search.
+ */
+function findActiveSegmentIndex(segments: TranscriptSegmentData[], time: number): number {
+  let low = 0;
+  let high = segments.length - 1;
+  let found = -1;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    if (segments[mid].timestamp <= time) {
+      found = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+  return found;
 }
 
 export function TranscriptPanel({
@@ -48,7 +75,19 @@ export function TranscriptPanel({
   meetingId,
   meetingFolderPath,
   onRefetchTranscripts,
+  onExport,
+  hasSummary = false,
+  isExporting = false,
 }: TranscriptPanelProps) {
+  // Playback of the saved recording. Never while recording: the file is still
+  // being written and the live page has its own controls.
+  const player = useAudioPlayer(!isRecording && meetingId ? meetingId : null);
+  const { seek, status: playerStatus, currentTime: playerTime } = player;
+
+  const handleSeek = useCallback((seconds: number) => {
+    void seek(seconds, { play: true });
+  }, [seek]);
+
   // Convert transcripts to segments if pagination is not used but we want virtualization
   const convertedSegments = useMemo(() => {
     if (usePagination && segments) {
@@ -64,6 +103,16 @@ export function TranscriptPanel({
     }));
   }, [transcripts, usePagination, segments]);
 
+  const activeSegmentId = useMemo(() => {
+    if (playerStatus !== 'ready' || convertedSegments.length === 0) return null;
+    const index = findActiveSegmentIndex(convertedSegments, playerTime);
+    if (index < 0) return null;
+    const segment = convertedSegments[index];
+    // Only highlight while inside the segment when we know where it ends.
+    if (segment.endTime !== undefined && playerTime > segment.endTime + 0.5) return null;
+    return segment.id;
+  }, [convertedSegments, playerStatus, playerTime]);
+
   return (
     <div className="flex h-full min-w-0 w-full bg-white flex-col relative @container">
       {/* Title area */}
@@ -75,8 +124,14 @@ export function TranscriptPanel({
           meetingId={meetingId}
           meetingFolderPath={meetingFolderPath}
           onRefetchTranscripts={onRefetchTranscripts}
+          onExport={onExport}
+          hasSummary={hasSummary}
+          isExporting={isExporting}
         />
       </div>
+
+      {/* Playback bar for the saved recording (hidden when there is none) */}
+      <AudioPlayer player={player} />
 
       {/* Transcript content - use virtualized view for better performance */}
       <div className="flex-1 overflow-hidden pb-4">
@@ -94,6 +149,8 @@ export function TranscriptPanel({
           totalCount={totalCount}
           loadedCount={loadedCount}
           onLoadMore={onLoadMore}
+          onSeek={playerStatus === 'ready' ? handleSeek : undefined}
+          activeSegmentId={activeSegmentId}
         />
       </div>
 

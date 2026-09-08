@@ -6,6 +6,8 @@ import { ButtonGroup } from '@/components/ui/button-group';
 import { Copy, FolderOpen, RefreshCw } from 'lucide-react';
 import Analytics from '@/lib/analytics';
 import { RetranscribeDialog } from './RetranscribeDialog';
+import { ExportMenu } from './ExportMenu';
+import type { ExportKind } from '@/lib/export-formats';
 import { useConfig } from '@/contexts/ConfigContext';
 
 
@@ -16,6 +18,9 @@ interface TranscriptButtonGroupProps {
   meetingId?: string;
   meetingFolderPath?: string | null;
   onRefetchTranscripts?: () => Promise<void>;
+  onExport?: (kind: ExportKind) => void | Promise<void>;
+  hasSummary?: boolean;
+  isExporting?: boolean;
 }
 
 
@@ -26,6 +31,9 @@ export function TranscriptButtonGroup({
   meetingId,
   meetingFolderPath,
   onRefetchTranscripts,
+  onExport,
+  hasSummary = false,
+  isExporting = false,
 }: TranscriptButtonGroupProps) {
   const { betaFeatures } = useConfig();
   const [showRetranscribeDialog, setShowRetranscribeDialog] = useState(false);
@@ -54,6 +62,15 @@ export function TranscriptButtonGroup({
           <Copy />
           <span className="hidden @[22rem]:inline">Copy</span>
         </Button>
+
+        {onExport && (
+          <ExportMenu
+            onExport={onExport}
+            hasSummary={hasSummary}
+            hasTranscript={transcriptCount > 0}
+            isExporting={isExporting}
+          />
+        )}
 
         <Button
           size="sm"

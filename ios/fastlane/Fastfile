@@ -37,7 +37,8 @@ platform :ios do
 
     # 1. Generate the Xcode project (idempotent) and a placeholder icon if none exists.
     sh("cd .. && xcodegen generate")
-    sh("cd .. && python3 scripts/make_placeholder_icon.py Minuteman/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png")
+    # Real icon is committed; only generate a placeholder if it is ever missing.
+    sh("cd .. && test -f Minuteman/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png || python3 scripts/make_placeholder_icon.py Minuteman/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png")
 
     # 2. Make sure the bundle id + App Store Connect record exist (no-op if present).
     create_app_online(

@@ -1381,3 +1381,238 @@ pub async fn api_test_custom_openai_connection<R: Runtime>(
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Meeting audio playback and file export
+// ---------------------------------------------------------------------------
+
+/// Local audio recording resolved for a meeting, ready to be streamed through
+/// the asset protocol (`convertFileSrc` on the frontend).
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MeetingAudioInfo {
+    pub path: String,
+    pub file_name: String,
+    pub size_bytes: u64,
+}
+
+/// Well-known recording names, in priority order. Windows recordings are
+/// `audio.mp4`; imports keep their original extension (`audio.wav`, ...).
+const MEETING_AUDIO_CANDIDATES: &[&str] = &[
+    "audio.mp4", "audio.m4a", "audio.wav", "audio.mp3", "audio.ogg", "audio.flac", "audio.webm",
+    "audio.aac", "audio.opus",
+];
+
+const MEETING_AUDIO_EXTENSIONS: &[&str] =
+    &["mp4", "m4a", "wav", "mp3", "ogg", "flac", "webm", "aac", "opus"];
+
+fn locate_meeting_audio(folder: &std::path::Path) -> Option<std::path::PathBuf> {
+    for name in MEETING_AUDIO_CANDIDATES {
+        let candidate = folder.join(name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+
+    // Fallback: any file in the folder with a known audio extension.
+    let mut matches: Vec<std::path::PathBuf> = std::fs::read_dir(folder)
+        .ok()?
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.is_file()
+                && path
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .map(|ext| MEETING_AUDIO_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+                    .unwrap_or(false)
+        })
+        .collect();
+    matches.sort();
+    matches.into_iter().next()
+}
+
+/// Resolves the on-disk audio recording for a meeting and adds it to the asset
+/// protocol scope so the webview can stream it (with range requests) through
+/// `convertFileSrc`. Returns `Ok(None)` when the meeting has no local audio,
+/// e.g. it was pulled from sync or the folder was deleted.
+#[tauri::command]
+pub async fn get_meeting_audio_path<R: Runtime>(
+    app: AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    meeting_id: String,
+) -> Result<Option<MeetingAudioInfo>, String> {
+    let pool = state.db_manager.pool();
+    let meeting = MeetingsRepository::get_meeting_metadata(pool, &meeting_id)
+        .await
+        .map_err(|e| format!("Database error: {}", e))?;
+
+    let Some(meeting) = meeting else {
+        return Err(format!("Meeting not found: {}", meeting_id));
+    };
+
+    let Some(folder_path) = meeting.folder_path.filter(|p| !p.trim().is_empty()) else {
+        log_debug!("Meeting {} has no recording folder; no audio to play", meeting_id);
+        return Ok(None);
+    };
+
+    let folder = std::path::PathBuf::from(&folder_path);
+    if !folder.is_dir() {
+        log_warn!(
+            "Recording folder for meeting {} is missing: {}",
+            meeting_id,
+            folder_path
+        );
+        return Ok(None);
+    }
+
+    let Some(audio_path) = locate_meeting_audio(&folder) else {
+        log_debug!("No audio file found in {}", folder_path);
+        return Ok(None);
+    };
+
+    let metadata = std::fs::metadata(&audio_path)
+        .map_err(|e| format!("Failed to read audio file metadata: {}", e))?;
+
+    tauri::Manager::asset_protocol_scope(&app)
+        .allow_file(&audio_path)
+        .map_err(|e| format!("Failed to allow audio file access: {}", e))?;
+
+    let file_name = audio_path
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    log_info!(
+        "Resolved audio for meeting {}: {} ({} bytes)",
+        meeting_id,
+        audio_path.display(),
+        metadata.len()
+    );
+
+    Ok(Some(MeetingAudioInfo {
+        path: audio_path.to_string_lossy().to_string(),
+        file_name,
+        size_bytes: metadata.len(),
+    }))
+}
+
+/// Makes a default file name safe for the save dialog and guarantees the
+/// expected extension.
+fn sanitize_export_file_name(name: &str, extension: &str) -> String {
+    let stem: String = name
+        .chars()
+        .map(|c| {
+            if c.is_control() || "\\/:*?\"<>|".contains(c) {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+    let stem = stem.trim().trim_matches('.').trim();
+    let stem = if stem.is_empty() { "meeting" } else { stem };
+    let suffix = format!(".{}", extension);
+    if stem.to_ascii_lowercase().ends_with(&suffix) {
+        stem.to_string()
+    } else {
+        format!("{}{}", stem, suffix)
+    }
+}
+
+/// Opens the native save dialog and writes `contents` (UTF-8, no BOM) to the
+/// location the user picks. The destination never comes from the webview: it
+/// is whatever the dialog returned, so the command cannot be used to write to
+/// an arbitrary location. Returns `Ok(None)` when the user cancels.
+#[tauri::command]
+pub async fn export_text_file<R: Runtime>(
+    app: AppHandle<R>,
+    default_file_name: String,
+    extension: String,
+    filter_name: String,
+    contents: String,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let extension = extension.trim().trim_start_matches('.').to_ascii_lowercase();
+    if extension.is_empty()
+        || extension.len() > 8
+        || !extension.chars().all(|c| c.is_ascii_alphanumeric())
+    {
+        return Err("Invalid export file extension".to_string());
+    }
+
+    let file_name = sanitize_export_file_name(&default_file_name, &extension);
+    let filter_name = if filter_name.trim().is_empty() {
+        format!("{} files", extension.to_ascii_uppercase())
+    } else {
+        filter_name
+    };
+
+    let dialog_app = app.clone();
+    let dialog_extension = extension.clone();
+    let chosen = tokio::task::spawn_blocking(move || {
+        dialog_app
+            .dialog()
+            .file()
+            .set_title("Export")
+            .set_file_name(&file_name)
+            .add_filter(filter_name, &[dialog_extension.as_str()])
+            .blocking_save_file()
+    })
+    .await
+    .map_err(|e| format!("Save dialog task failed: {}", e))?;
+
+    let Some(file_path) = chosen else {
+        return Ok(None);
+    };
+
+    let mut path = file_path
+        .into_path()
+        .map_err(|e| format!("Unsupported save location: {}", e))?;
+    if path.extension().is_none() {
+        path.set_extension(&extension);
+    }
+
+    match path.parent() {
+        Some(parent) if parent.as_os_str().is_empty() || parent.is_dir() => {}
+        _ => return Err("The selected folder does not exist".to_string()),
+    }
+
+    tokio::fs::write(&path, contents.as_bytes())
+        .await
+        .map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
+
+    log_info!("Exported {} bytes to {}", contents.len(), path.display());
+    Ok(Some(path.to_string_lossy().to_string()))
+}
+
+#[cfg(test)]
+mod export_tests {
+    use super::*;
+
+    #[test]
+    fn sanitize_export_file_name_strips_reserved_characters() {
+        assert_eq!(
+            sanitize_export_file_name("Q3: plan/review?", "md"),
+            "Q3_ plan_review_.md"
+        );
+        assert_eq!(sanitize_export_file_name("   ", "txt"), "meeting.txt");
+        assert_eq!(sanitize_export_file_name("notes.MD", "md"), "notes.MD");
+    }
+
+    #[test]
+    fn locate_meeting_audio_prefers_known_names() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("zzz.wav"), b"x").unwrap();
+        assert_eq!(
+            locate_meeting_audio(dir.path()).unwrap().file_name().unwrap(),
+            "zzz.wav"
+        );
+        std::fs::write(dir.path().join("audio.mp4"), b"x").unwrap();
+        assert_eq!(
+            locate_meeting_audio(dir.path()).unwrap().file_name().unwrap(),
+            "audio.mp4"
+        );
+        assert!(locate_meeting_audio(&dir.path().join("missing")).is_none());
+    }
+}

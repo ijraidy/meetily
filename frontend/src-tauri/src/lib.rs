@@ -211,12 +211,17 @@ async fn is_recording() -> bool {
     audio::recording_commands::is_recording().await
 }
 
+/// Real live-queue numbers. This used to be a stub that always answered
+/// `is_processing: false, chunks_in_queue: 0`, so the frontend's post-stop
+/// "wait for transcription" loop exited on its first poll no matter what the
+/// workers were doing.
 #[tauri::command]
-fn get_transcription_status() -> TranscriptionStatus {
+async fn get_transcription_status() -> TranscriptionStatus {
+    let status = audio::recording_commands::get_transcription_status().await;
     TranscriptionStatus {
-        chunks_in_queue: 0,
-        is_processing: false,
-        last_activity_ms: 0,
+        chunks_in_queue: status.chunks_in_queue,
+        is_processing: status.is_processing,
+        last_activity_ms: status.last_activity_ms,
     }
 }
 
@@ -752,6 +757,9 @@ pub fn run() {
             sync::commands::sync_regenerate_token,
             sync::commands::sync_set_enabled,
             sync::commands::sync_set_port,
+            // Meeting audio playback and file export (api module)
+            api::get_meeting_audio_path,
+            api::export_text_file,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -1,8 +1,8 @@
 # Minuteman
 
-Minuteman is a private, local-first meeting assistant for Windows with an iPhone companion. It records or imports meetings, transcribes them on the local GPU with multilingual Whisper (English, Arabic, and mixed), and turns them into summaries, decisions, and action plans with owners and deadlines using a local language model. Nothing leaves the machine unless an external AI provider is configured on purpose.
+Minuteman is a privacy-first, local meeting assistant for Windows with an iPhone companion. It records or imports meetings, transcribes them on the local GPU with multilingual Whisper (English, Arabic, and mixed), and turns them into summaries, decisions, and action plans with owners and deadlines using a local language model. Nothing leaves the machine unless an external AI provider is configured on purpose.
 
-Owner: Juraydi al-Mansouri. Not distributed.
+Developed and maintained by Juraydi al-Mansouri ([github.com/ijraidy](https://github.com/ijraidy), j@mansouri.uk), including the Minuteman iPhone app.
 
 ## Layout
 
